@@ -37,6 +37,12 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Random;
+import java.util.Scanner;
+import java.io.ObjectInputStream;
+
+
+import org.apache.commons.io.IOUtils;
+
 
 /**
  * A simple echo server.
@@ -58,16 +64,23 @@ public class ServerVCS  {
 	//  final variable
 	private final ServerSocket serverSocket;
 	
+	private WorkingDirectory server_repository = new WorkingDirectory("./");
+	private String servername = "Serverrepos";
+	String clientassignment;
 	/**
 	 * Construct a new ServerVCS that listens on the given port.
 	 */
 	public ServerVCS(int port) throws IOException {
+		
 		//creates address (ip:port) for the server
 		InetSocketAddress serverAddress = new InetSocketAddress(port);
 		//bind unbound variable "serverSocket" to an unbound server socket
 		this.serverSocket = new ServerSocket();
 		//Serversocket gets bond to address
 		serverSocket.bind(serverAddress);
+		if (!server_repository.changeWorkingDir(servername)){
+		server_repository.createDir(servername);
+		}
 	}
 	
 	/**
@@ -92,9 +105,59 @@ public class ServerVCS  {
 		// return immediately
 	}
 	
-	
+	//gaat gevraagde command ,indien juist, uitvoeren en anders gaat hij de client verwittigen
+	public void process(String input) throws IOException{
+	     Scanner s = new Scanner(input);
+	     String command = s.next();
+	     
+	     if(command.equals("checkout")){
+	    	 //more is coming 
+	 
+	     }
+	     else  if(command.equals("add")) {
+	    	 //more is coming 
+	    	 
+	     }
+	     else if(command.equals("commit")) {
+	    	 //more is coming 
+	    	
+	     }
+	     else if(command.equals("create_repository")) {
+	    	 //create a new repository en creeer deze ook bij client
+	    	 String name_repo = s.next();
+	    	 clientassignment = command + " " + name_repo;
+	    	 //When the creation of a new directory fails and we get the boolean false back, we assume that the directory already exists.
+	    	 if (!create_repository(name_repo)){
+	    		 clientassignment = "ERROR: repository already exists!";
+	    		 System.out.print("Server: ERROR: Cannot create new repository '" + name_repo + "'! It already exists!");
+	    	 }
+	    	 else{ 
+	    		 System.out.print("Server: New repository '" + name_repo + "' succefully created");
+	    	 }
+	     }
+	     else if(command.equals("update")) {
+	    	 //more is coming 
+	    	
+	     }
+	     else if(command.equals("status")) {
+	    	 //more is coming 
+	    	
+	     }
+	     else if(command.equals("diff")) {
+	    	 //more is coming 
+	    	
+	     }
+	     else {
+	    	 System.out.print("Server: ERROR: invalid command '" +  input + "'" );
+	    	 clientassignment = "ERROR: Invalid command!";
+	     }
+	}
 
+	//<<<<<<COMMANDS>>>>>>>
 	
+	public Boolean create_repository(String name) throws IOException{
+	    return server_repository.createDir(name);
+	}
 	
 	private class Session extends Thread {
 		
@@ -146,12 +209,17 @@ public class ServerVCS  {
 					// read string from client
 					String clientInput = input.readLine();
 					
+					
+					
 					// log the string on the local console
 					System.out.println("Server: client sent '" +
 					                   clientInput + "'");
 					
+					//process client input
+					process(clientInput);
+					
 					// send back the string to the client
-					output.println(clientInput);
+					output.println(clientassignment);
 					
 					// make sure the output is sent to the client before closing
 					// the stream

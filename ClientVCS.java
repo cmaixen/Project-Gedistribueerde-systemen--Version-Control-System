@@ -11,6 +11,9 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.Scanner;
+
+
 
 /**
  * A simple client to an {@link EchoServer}.
@@ -23,10 +26,23 @@ import java.net.UnknownHostException;
  * Illustrates the use of TCP/IP sockets.
  */
 public class ClientVCS {
-	
+	private WorkingDirectory client_repository = new WorkingDirectory("./") ;
 	private static final String PROMPT = "> ";
+	//locale plaats waar repositories staan opgeslagen
+    private String clientreposfolder = "Clientrepos";
+    //output messages of the server get adjusted by applied methodes that react on original message from server
+    String serverReply;
 	PrintWriter output;
 	
+	//Constructor
+	public ClientVCS() throws IOException{
+	//checks if there is a location for repos, if not initialize this location
+		if (!client_repository.changeWorkingDir(clientreposfolder)){
+		//create folder
+		client_repository.createDir(clientreposfolder);
+		}
+	}
+
 	/**
 	 * Connect to server at the given ip:port combination,
 	 * send the msg string and await a reply.
@@ -54,17 +70,17 @@ public class ClientVCS {
 		Socket socket = new Socket();
 		socket.connect(serverAddress);
 		try {
-		// get raw input and output streams
+			// get raw input and output streams
 			InputStream rawInput = socket.getInputStream();
 			OutputStream rawOutput = socket.getOutputStream();
 			
 			// wrap streams in Readers and Writers to read and write
 			// text Strings rather than individual bytes 
+			//It's advisable to wrap a BufferedReader around each Reader and Writer to be less costly
 			BufferedReader input = new BufferedReader(
 					new InputStreamReader(rawInput));
+			//PrintWriter converts characters automatically to bytes
 			output = new PrintWriter(rawOutput);
-		
-			
 			
 			BufferedReader consoleInput = new BufferedReader(
 					new InputStreamReader(System.in));
@@ -75,6 +91,9 @@ public class ClientVCS {
 				System.out.print(PROMPT);
 				message = consoleInput.readLine();
 
+			    //prepares message before sending it to the server
+				prepare(message);
+				
 				// send message to the server
 				output.println(message);
 				
@@ -85,9 +104,12 @@ public class ClientVCS {
 				System.out.println("Client: sent '" + message + "'");
 				
 				// wait for and read the reply of the server
-				String serverReply = input.readLine();
+				serverReply = input.readLine();
 				
-				// log the string on the local console
+				//process assignment server
+				process(serverReply);
+				
+				//log the string on the local console
 				System.out.println("Client: server replied '" +
 				                   serverReply + "'");
 				
@@ -100,6 +122,131 @@ public class ClientVCS {
 	}
 	
 	
+	public void process(String input) throws IOException{
+	     Scanner s = new Scanner(input);
+	     String command = s.next();
+	     
+	     if(command.equals("checkout")){
+	    	 //more is coming 
+	 
+	     }
+	     else  if(command.equals("add")) {
+	    	 //more is coming 
+	    	 
+	     }
+	     else if(command.equals("commit")) {
+	    	 //more is coming 
+	    	
+	     }
+	     else if(command.equals("create_repository")) {
+	    	 //create a new repository en creeer deze ook bij client
+	    	 String name_repo = s.next();
+	    	 create_repository(name_repo);	 
+	     }
+	     else if(command.equals("update")) {
+	    	 //more is coming 
+	    	
+	     }
+	     else if(command.equals("status")) {
+	    	 //more is coming 
+	    	
+	     }
+	     else if(command.equals("diff")) {
+	    	 //more is coming 
+	    	
+	     }
+	     else if(command.equals("ERROR:")){
+	    	 serverReply =  input;
+	     }
+	     else {
+	    	 System.out.println("invalid command '" + input + "'");
+	     }
+	}
+
+	public void prepare(String input) throws IOException{
+	     Scanner s = new Scanner(input);
+	     String command = s.next();
+	     String name = s.next();
+	     String result = null;
+	     if(command.equals("checkout")){
+	    	 
+	 
+	     }
+	     else  if(command.equals("add")) {
+	    	 //prepare stream for an add
+	    	 
+	     }
+	     else if(command.equals("commit")) {
+	    	 //more is coming 
+	    	
+	     }
+	     else if(command.equals("create_repository")) {
+	    	 //create a new repository en creeer deze ook bij client
+	    	 String name_repo = s.next();
+	    	 create_repository(name_repo);	 
+	     }
+	     else if(command.equals("update")) {
+	    	 //more is coming 
+	    	
+	     }
+	     else if(command.equals("status")) {
+	    	 //more is coming 
+	    	
+	     }
+	     else if(command.equals("diff")) {
+	    	 //more is coming 
+	    	
+	     }
+	     else if(command.equals("ERROR:")){
+	    	 serverReply =  input;
+	     }
+	     else {
+	    	 System.out.println("invalid command '" + input + "'");
+	     }
+	}
+
+
+	
+	
+//COMMANNDS OM OP TE STELLEN
+	
+	//Laat de client toe om een nieuw bestand aan de repository toe te voegen.
+		
+	public void add(String filename){	
+		};
+		
+		//Dit commando wordt eenmaal uitgevoerd en maakt een working copy aan bij de client.
+		public void checkout(String repository){
+			
+		};
+		
+		//Verstuurt veranderingen naar de repository op de server. Heeft een -m optie om een logbericht toe te voegen aan deze commit.
+		
+		public void commit(){	
+		};
+		
+		//Dit commando wordt gebruikt om de verschillen tussen twee revisies van een bestand te weten te komen.
+		public void diff(){	
+		};
+				
+		//Toont een status van je working copy: welke bestanden je aangepast hebt, revisienummers van de bestanden, etc.	
+		public void status(){	
+		};
+		
+		//Wordt gebruikt om de working copy te synchroniseren met de repository op de server.
+		public void update(){	
+		};
+		
+		//repository cre‘ren.
+		//De verantwoordelijkheid om te kijken of de repository al bestaat ligt bij de server.
+		public void create_repository(String name) throws IOException{
+			client_repository.createDir(name);	
+			System.out.println("Client: New repository '" + name + "' succefull locally created");
+			serverReply = "New repository '" + name + "' succefully created"; 
+		}
+		
+		
+		
 	/**
 	 * Usage: java ClientVCS ip port message
 	 * 
