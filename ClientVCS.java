@@ -92,7 +92,7 @@ public class ClientVCS {
 				message = consoleInput.readLine();
 
 			    //prepares message before sending it to the server
-				prepare(message);
+			//	prepare(message);
 				
 				// send message to the server
 				output.println(message);

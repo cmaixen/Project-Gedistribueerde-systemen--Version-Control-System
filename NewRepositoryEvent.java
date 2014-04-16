@@ -6,8 +6,8 @@ import java.io.Serializable;
 public class NewRepositoryEvent extends Command implements Serializable{
 	
 	//Contructor
-	public NewRepositoryEvent(String command, String name){
-		Command = command;
+	public NewRepositoryEvent(String name){
+		Command = "create_repository";
 		Name = name;
 	};
 	

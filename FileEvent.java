@@ -1,6 +1,7 @@
 import java.io.Serializable;
+
  
-public class FileEvent implements Serializable {
+public class FileEvent  extends Command  implements Serializable{
  
     public FileEvent() {
     }
