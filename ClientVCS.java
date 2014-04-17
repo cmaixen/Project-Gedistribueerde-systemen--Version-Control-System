@@ -5,6 +5,8 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.InetAddress;
@@ -27,12 +29,17 @@ import java.util.Scanner;
  */
 public class ClientVCS {
 	private WorkingDirectory client_repository = new WorkingDirectory("./") ;
+	
 	private static final String PROMPT = "> ";
+	
 	//locale plaats waar repositories staan opgeslagen
     private String clientreposfolder = "Clientrepos";
+    
     //output messages of the server get adjusted by applied methodes that react on original message from server
-    String serverReply;
-	PrintWriter output;
+    Command serverReply;
+String serverMessage;
+	private ObjectOutputStream outputStream = null;
+	private ObjectInputStream inputStream = null;
 	
 	//Constructor
 	public ClientVCS() throws IOException{
@@ -62,26 +69,21 @@ public class ClientVCS {
 	 * @throws UnknownHostException if the server IP could not be found
 	 * @throws IOException if there is an error in setting up or communicating
 	 *         with the server.
+	 * @throws ClassNotFoundException 
 	 */
 	public void connectToServer(InetAddress ip, int port)
-		        throws UnknownHostException, IOException {
+		        throws UnknownHostException, IOException, ClassNotFoundException {
 		
 		InetSocketAddress serverAddress = new InetSocketAddress(ip, port);		
 		Socket socket = new Socket();
 		socket.connect(serverAddress);
 		try {
-			// get raw input and output streams
-			InputStream rawInput = socket.getInputStream();
-			OutputStream rawOutput = socket.getOutputStream();
 			
-			// wrap streams in Readers and Writers to read and write
-			// text Strings rather than individual bytes 
-			//It's advisable to wrap a BufferedReader around each Reader and Writer to be less costly
-			BufferedReader input = new BufferedReader(
-					new InputStreamReader(rawInput));
-			//PrintWriter converts characters automatically to bytes
-			output = new PrintWriter(rawOutput);
+			//create Objectstreams
+			outputStream = new ObjectOutputStream(socket.getOutputStream());
+			inputStream = new ObjectInputStream(socket.getInputStream());
 			
+			//Bufferreader for consoleinput
 			BufferedReader consoleInput = new BufferedReader(
 					new InputStreamReader(System.in));
 			
@@ -92,26 +94,27 @@ public class ClientVCS {
 				message = consoleInput.readLine();
 
 			    //prepares message before sending it to the server
-			//	prepare(message);
+				 Command commandobject;
+			     commandobject = prepare(message);
 				
 				// send message to the server
-				output.println(message);
+				outputStream.writeObject(commandobject);
 				
 				// make sure the output is sent to the server before waiting
 				// for a reply
-				output.flush();
+				outputStream.flush();
 				
 				System.out.println("Client: sent '" + message + "'");
 				
 				// wait for and read the reply of the server
-				serverReply = input.readLine();
+				serverReply = (Command) inputStream.readObject();
 				
 				//process assignment server
 				process(serverReply);
 				
 				//log the string on the local console
 				System.out.println("Client: server replied '" +
-				                   serverReply + "'");
+				                   serverMessage + "'");
 				
 			} while (true);
 
@@ -122,11 +125,10 @@ public class ClientVCS {
 	}
 	
 	
-	public void process(String input) throws IOException{
-	     Scanner s = new Scanner(input);
-	     String command = s.next();
+	public void process(Command input) throws IOException{
+	  String command = input.getCommand(); 
 	     
-	     if(command.equals("checkout")){
+	  if(command.equals("checkout")){
 	    	 //more is coming 
 	 
 	     }
@@ -140,7 +142,8 @@ public class ClientVCS {
 	     }
 	     else if(command.equals("create_repository")) {
 	    	 //create a new repository en creeer deze ook bij client
-	    	 String name_repo = s.next();
+	    NewRepositoryEvent newrepo = (NewRepositoryEvent) input;
+	    String name_repo = newrepo.getName();
 	    	 create_repository(name_repo);	 
 	     }
 	     else if(command.equals("update")) {
@@ -155,15 +158,15 @@ public class ClientVCS {
 	    	 //more is coming 
 	    	
 	     }
-	     else if(command.equals("ERROR:")){
-	    	 serverReply =  input;
+	     else if(command.equals("ERROR")){
+	    	serverMessage = ((ErrorEvent) input).getNotification();
 	     }
 	     else {
 	    	 System.out.println("invalid command '" + input + "'");
 	     }
 	}
 
-	public void prepare(String input) throws IOException{
+	public Command prepare(String input) throws IOException{
 	     Scanner s = new Scanner(input);
 	     String command = s.next();
 	     String name = s.next();
@@ -181,9 +184,7 @@ public class ClientVCS {
 	    	
 	     }
 	     else if(command.equals("create_repository")) {
-	    	 //create a new repository en creeer deze ook bij client
-	    	 String name_repo = s.next();
-	    	 create_repository(name_repo);	 
+	    	return new NewRepositoryEvent(name);
 	     }
 	     else if(command.equals("update")) {
 	    	 //more is coming 
@@ -198,11 +199,14 @@ public class ClientVCS {
 	    	
 	     }
 	     else if(command.equals("ERROR:")){
-	    	 serverReply =  input;
+	    	 
 	     }
 	     else {
 	    	 System.out.println("invalid command '" + input + "'");
 	     }
+	     
+	     //tijdelijk
+		return null;
 	}
 
 
@@ -242,7 +246,7 @@ public class ClientVCS {
 		public void create_repository(String name) throws IOException{
 			client_repository.createDir(name);	
 			System.out.println("Client: New repository '" + name + "' succefull locally created");
-			serverReply = "New repository '" + name + "' succefully created"; 
+			serverMessage = "New repository '" + name + "' succefully created"; 
 		}
 		
 		
@@ -259,8 +263,9 @@ public class ClientVCS {
 	 *   
 	 * @throws IOException if there was an error connecting with or
 	 *         communicating with the server. 
+	 * @throws ClassNotFoundException 
 	 */
-	public static void main(String[] args) throws IOException {
+	public static void main(String[] args) throws IOException, ClassNotFoundException {
 		if (args.length != 2) {
 			System.out.println("Usage: java ClientVCS ip port");
 			return;

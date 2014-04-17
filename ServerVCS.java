@@ -29,6 +29,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.InetSocketAddress;
@@ -39,7 +40,6 @@ import java.util.HashMap;
 import java.util.Random;
 import java.util.Scanner;
 import java.io.ObjectInputStream;
-
 
 import org.apache.commons.io.IOUtils;
 
@@ -66,7 +66,7 @@ public class ServerVCS  {
 	
 	private WorkingDirectory server_repository = new WorkingDirectory("./");
 	private String servername = "Serverrepos";
-	String clientassignment;
+	Command clientassignment;
 	/**
 	 * Construct a new ServerVCS that listens on the given port.
 	 */
@@ -106,10 +106,9 @@ public class ServerVCS  {
 	}
 	
 	//gaat gevraagde command ,indien juist, uitvoeren en anders gaat hij de client verwittigen
-	public void process(String input) throws IOException{
-	     Scanner s = new Scanner(input);
-	     String command = s.next();
-	     
+	public Command process(Command input) throws IOException{
+	    String command = input.getCommand();
+	    Command respons = null;
 	     if(command.equals("checkout")){
 	    	 //more is coming 
 	 
@@ -124,15 +123,17 @@ public class ServerVCS  {
 	     }
 	     else if(command.equals("create_repository")) {
 	    	 //create a new repository en creeer deze ook bij client
-	    	 String name_repo = s.next();
-	    	 clientassignment = command + " " + name_repo;
+	    	 NewRepositoryEvent newrepo = (NewRepositoryEvent) input;
+	    	 String name_repo = newrepo.getName();
+	    	 respons = newrepo;
 	    	 //When the creation of a new directory fails and we get the boolean false back, we assume that the directory already exists.
 	    	 if (!create_repository(name_repo)){
-	    		 clientassignment = "ERROR: repository already exists!";
-	    		 System.out.print("Server: ERROR: Cannot create new repository '" + name_repo + "'! It already exists!");
+	    		 System.out.println("Server: ERROR: Cannot create new repository '" + name_repo + "'! It already exists!");
+	    		 respons = new ErrorEvent("repository already exists!");
+	    		 
 	    	 }
 	    	 else{ 
-	    		 System.out.print("Server: New repository '" + name_repo + "' succefully created");
+	    		 System.out.println("Server: New repository '" + name_repo + "' succefully created");
 	    	 }
 	     }
 	     else if(command.equals("update")) {
@@ -149,8 +150,9 @@ public class ServerVCS  {
 	     }
 	     else {
 	    	 System.out.print("Server: ERROR: invalid command '" +  input + "'" );
-	    	 clientassignment = "ERROR: Invalid command!";
+	    	 respons = new ErrorEvent("Invalid command!");
 	     }
+		return respons;
 	}
 
 	//<<<<<<COMMANDS>>>>>>>
@@ -163,19 +165,14 @@ public class ServerVCS  {
 		
 		private final Socket clientSocket;
 		private int id;
-		
-		private BufferedReader input;
-		private PrintWriter output;
+		private ObjectOutputStream outputStream = null;
+		private ObjectInputStream inputStream = null;
 		
 		public Session(Socket clientSocket, int id) {
 			this.id = id;
 			this.clientSocket = clientSocket;
 		}
-		
-		public void send(String message) {
-			output.println(message);
-			output.flush();
-		}
+	
 		
 		/**
 		 * Handles communication with a single client.
@@ -196,38 +193,38 @@ public class ServerVCS  {
 			try {
 				
 				// get raw input and output streams
-				InputStream rawInput = this.clientSocket.getInputStream();
-				OutputStream rawOutput = this.clientSocket.getOutputStream();
+				//create Objectstreams
+				outputStream = new ObjectOutputStream(clientSocket.getOutputStream());
+				inputStream = new ObjectInputStream(clientSocket.getInputStream());
 				
-				// wrap streams in Readers and Writers to read and write
-				// text Strings rather than individual bytes 
-				input = new BufferedReader(
-						new InputStreamReader(rawInput));
-				output = new PrintWriter(rawOutput);
+				
 				
 				while (true) {
 					// read string from client
-					String clientInput = input.readLine();
+					Command clientInput = (Command) inputStream.readObject();
 					
-					
+					String clientcommand = clientInput.getCommand();
 					
 					// log the string on the local console
 					System.out.println("Server: client sent '" +
-					                   clientInput + "'");
+					                   clientcommand + "'");
 					
 					//process client input
-					process(clientInput);
+					clientassignment = process(clientInput);
 					
 					// send back the string to the client
-					output.println(clientassignment);
+					outputStream.writeObject(clientassignment);
 					
 					// make sure the output is sent to the client before closing
 					// the stream
-					output.flush();				
+					outputStream.flush();				
 				}
 			
 			} catch (IOException e) {
 				
+			} catch (ClassNotFoundException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 			} finally {
 				// tear down communication
 				System.err.println("Server: closing client connection");

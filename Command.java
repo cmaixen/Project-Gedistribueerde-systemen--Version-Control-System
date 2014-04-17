@@ -1,8 +1,17 @@
 import java.io.Serializable;
 
-//a global class to know which sort of object we receive from the client
+/**
+ * A global class to know which sort of object we receive from the client
+ * @author yannickmerckx
+ *
+ */
 //sort of tag
 public class Command  implements Serializable {
 	
-	String Command;
+	private static final long serialVersionUID = 1L;
+	protected String Command;
+	
+	public String getCommand(){
+		return Command;
+	}
 }

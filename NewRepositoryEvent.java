@@ -13,6 +13,11 @@ public class NewRepositoryEvent extends Command implements Serializable{
 	
 	private static final long serialVersionUID = -7965362049008228296L;
 	
-	String Name;
+	private String Name;
+	
+	//accesors 
+	public String getName(){
+		return Name;
+	}
 
 }
