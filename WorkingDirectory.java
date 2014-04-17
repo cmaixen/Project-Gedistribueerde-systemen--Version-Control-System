@@ -48,9 +48,13 @@ public class WorkingDirectory {
 	 * Content of current directory
 	 * @return list of files
 	 */
-	public String[] listFiles() {
+	public String[] list() {
 		
 		return currentDirectory.list();
+	}
+	
+	public File[] listFiles(){
+		return currentDirectory.listFiles();
 	}
 	
 	/**
@@ -115,6 +119,8 @@ public class WorkingDirectory {
 		return new File(getWorkingDir() + "/" + name).mkdir();
 	}
 	
+	
+	
 	/**
 	 * Create file in current directory
 	 * @param name the file's name
@@ -128,6 +134,13 @@ public class WorkingDirectory {
 			// TODO Auto-generated catch block
 			return false;
 		}
+	}
+	
+	public boolean goToWorkingDir(String newPath) throws IOException {
+		File newDir = new File("./" + newPath);
+		boolean success = newDir.exists();
+		if(success) currentDirectory = newDir;
+		return success;
 	}
 	
 	//**********************************************

@@ -26,6 +26,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.*/
 
 
 import java.io.BufferedReader;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -66,6 +69,7 @@ public class ServerVCS  {
 	
 	private WorkingDirectory server_repository = new WorkingDirectory("./");
 	private String servername = "Serverrepos";
+	private String serverhomeDirectory = "./" +servername;
 	Command clientassignment;
 	/**
 	 * Construct a new ServerVCS that listens on the given port.
@@ -105,55 +109,7 @@ public class ServerVCS  {
 		// return immediately
 	}
 	
-	//gaat gevraagde command ,indien juist, uitvoeren en anders gaat hij de client verwittigen
-	public Command process(Command input) throws IOException{
-	    String command = input.getCommand();
-	    Command respons = null;
-	     if(command.equals("checkout")){
-	    	 //more is coming 
-	 
-	     }
-	     else  if(command.equals("add")) {
-	    	 //more is coming 
-	    	 
-	     }
-	     else if(command.equals("commit")) {
-	    	 //more is coming 
-	    	
-	     }
-	     else if(command.equals("create_repository")) {
-	    	 //create a new repository en creeer deze ook bij client
-	    	 NewRepositoryEvent newrepo = (NewRepositoryEvent) input;
-	    	 String name_repo = newrepo.getName();
-	    	 respons = newrepo;
-	    	 //When the creation of a new directory fails and we get the boolean false back, we assume that the directory already exists.
-	    	 if (!create_repository(name_repo)){
-	    		 System.out.println("Server: ERROR: Cannot create new repository '" + name_repo + "'! It already exists!");
-	    		 respons = new ErrorEvent("repository already exists!");
-	    		 
-	    	 }
-	    	 else{ 
-	    		 System.out.println("Server: New repository '" + name_repo + "' succefully created");
-	    	 }
-	     }
-	     else if(command.equals("update")) {
-	    	 //more is coming 
-	    	
-	     }
-	     else if(command.equals("status")) {
-	    	 //more is coming 
-	    	
-	     }
-	     else if(command.equals("diff")) {
-	    	 //more is coming 
-	    	
-	     }
-	     else {
-	    	 System.out.print("Server: ERROR: invalid command '" +  input + "'" );
-	    	 respons = new ErrorEvent("Invalid command!");
-	     }
-		return respons;
-	}
+	
 
 	//<<<<<<COMMANDS>>>>>>>
 	
@@ -233,8 +189,128 @@ public class ServerVCS  {
 				} catch (IOException e) { /* ignore */ }
 			}
 		}
+		 public Command locateFiles(String name,String sourceDestination) throws IOException {
+			    Command respons = null;
+			    int fileCount;
+			    
+			    //ga eerst naar de homedir
+			    server_repository.goToWorkingDir(serverhomeDirectory);
+			    //kijk nu of path/map bestaat
+			    if(!server_repository.changeWorkingDir(name)){
+			    	
+		           respons = new ErrorEvent("Source directory is not valid ...");
+		        }
+			    else {
+			    String sourceDirectory = server_repository.getWorkingDir();
+		        File[] files = server_repository.listFiles();
+		        fileCount = files.length;
+		        //if (fileCount == 0) {
+		       //     System.out.println("Empty directory ..Exiting the client");
+//		        }
+		        for (int i = 0; i < fileCount; i++) {
+		            System.out.println("Server: Sending " + files[i].getAbsolutePath());
+		            sendFile(files[i].getAbsolutePath(), fileCount - i - 1, sourceDirectory, sourceDestination);
+		         
+		        }
+		        respons = new CheckoutEvent(name, sourceDestination);
+			    }
+		        return respons;
+		    }
+		 
+		 private void sendFile(String fileName, int index, String sourceDirectory, String sourceDestination) {
+		        FileEvent fileEvent = new FileEvent();
+		        fileEvent.setDestinationDirectory(sourceDestination);
+		        fileEvent.setSourceDirectory(sourceDirectory);
+		        File file = new File(fileName);
+		        fileEvent.setFilename(file.getName());
+		        fileEvent.setRemainder(index);
+		        DataInputStream diStream = null;
+		        try {
+		            diStream = new DataInputStream(new FileInputStream(file));
+		            long len = (int) file.length();
+		            byte[] fileBytes = new byte[(int) len];
+		 
+		            int read = 0;
+		            int numRead = 0;
+		            while (read < fileBytes.length && (numRead = diStream.read(fileBytes, read,
+		                    fileBytes.length - read)) >= 0) {
+		                read = read + numRead;
+		            }
+		            fileEvent.setFileData(fileBytes);
+		            fileEvent.setStatus("Success");
+		        } catch (Exception e) {
+		            e.printStackTrace();
+		            fileEvent.setStatus("Error");
+		 
+		        }
+		 
+		        try {
+		            outputStream.writeObject(fileEvent);
+		        } catch (IOException e) {
+		            e.printStackTrace();
+		        }
+		    }
+			
+			//gaat gevraagde command ,indien juist, uitvoeren en anders gaat hij de client verwittigen
+			public Command process(Command input) throws IOException{
+			    String command = input.getCommand();
+			    Command respons = null;
+			     if(command.equals("CHECKOUT")){
+
+			    	 String dest = ((CheckoutEvent) input).getDestination();
+			    	 String reponame = ((CheckoutEvent) input).getName();
+			    	//locate files 
+			    	respons = locateFiles(reponame , dest);
+			    	 
+			    	 
+			     }
+			     else  if(command.equals("add")) {
+			    	 //more is coming 
+			    	 
+			     }
+			     else if(command.equals("commit")) {
+			    	 //more is coming 
+			    	
+			     }
+			     else if(command.equals("create_repository")) {
+			    	 //create a new repository en creeer deze ook bij client
+			    	 NewRepositoryEvent newrepo = (NewRepositoryEvent) input;
+			    	 String name_repo = newrepo.getName();
+			    	 respons = newrepo;
+			    	 //reset to homefolder
+			    	 server_repository.goToWorkingDir(serverhomeDirectory);
+			    	 //When the creation of a new directory fails and we get the boolean false back, we assume that the directory already exists.
+			    	 if (!create_repository(name_repo)){
+			    		 System.out.println("Server: ERROR: Cannot create new repository '" + name_repo + "'! It already exists!");
+			    		 respons = new ErrorEvent("repository already exists!");
+			    		 
+			    	 }
+			    	 else{ 
+			    		 System.out.println("Server: New repository '" + name_repo + "' succefully created");
+			    	 }
+			     }
+			     else if(command.equals("update")) {
+			    	 //more is coming 
+			    	
+			     }
+			     else if(command.equals("status")) {
+			    	 //more is coming 
+			    	
+			     }
+			     else if(command.equals("diff")) {
+			    	 //more is coming 
+			    	
+			     }
+			     else {
+			    	 System.out.print("Server: ERROR: invalid command '" +  input + "'" );
+			    	 respons = new ErrorEvent("Invalid command!");
+			     }
+				return respons;
+			}
 		
 	}
+	
+	
 	
 	/**
 	 * Usage: java ServerVCS port

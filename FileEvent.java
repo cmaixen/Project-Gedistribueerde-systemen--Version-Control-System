@@ -4,6 +4,7 @@ import java.io.Serializable;
 public class FileEvent  extends Command  implements Serializable{
  
     public FileEvent() {
+    	Command = "FileEvent";
     }
  
     private static final long serialVersionUID = 1L;

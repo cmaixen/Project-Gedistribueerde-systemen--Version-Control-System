@@ -2,6 +2,8 @@
 
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -18,14 +20,14 @@ import java.util.Scanner;
 
 
 /**
- * A simple client to an {@link EchoServer}.
+ * A Version Control System Client
  * 
- * Once connected to the server, opens a session so that any
+ * Once connected to the server, opens a session that any
  * newline-terminated String from the standard input stream
- * is sent to the server. Entering an empty string stops the
- * session and terminates the client.
+ * is sent to the server as a java-object.
+ * Entering an empty string stops the session and terminates the client.
  * 
- * Illustrates the use of TCP/IP sockets.
+ * The connection is established with TCP/IP sockets
  */
 public class ClientVCS {
 	private WorkingDirectory client_repository = new WorkingDirectory("./") ;
@@ -40,6 +42,7 @@ public class ClientVCS {
 String serverMessage;
 	private ObjectOutputStream outputStream = null;
 	private ObjectInputStream inputStream = null;
+	Socket socket = new Socket();
 	
 	//Constructor
 	public ClientVCS() throws IOException{
@@ -54,7 +57,7 @@ String serverMessage;
 	 * Connect to server at the given ip:port combination,
 	 * send the msg string and await a reply.
 	 * 
-	 * Client and server sockets communicate via input and output streams,
+	 * Client and server sockets communicate via input and output Objectstreams,
 	 * as shown schematically below:
 	 * 
 	 * <pre>
@@ -74,8 +77,7 @@ String serverMessage;
 	public void connectToServer(InetAddress ip, int port)
 		        throws UnknownHostException, IOException, ClassNotFoundException {
 		
-		InetSocketAddress serverAddress = new InetSocketAddress(ip, port);		
-		Socket socket = new Socket();
+		InetSocketAddress serverAddress = new InetSocketAddress(ip, port);	
 		socket.connect(serverAddress);
 		try {
 			
@@ -93,9 +95,21 @@ String serverMessage;
 				System.out.print(PROMPT);
 				message = consoleInput.readLine();
 
-			    //prepares message before sending it to the server
+			    //prepares and checking message before sending it to the server
 				 Command commandobject;
 			     commandobject = prepare(message);
+			     
+			     //check on valid Command
+			    if((commandobject.getCommand()).equals("ERROR")){
+			    	System.out.println(((ErrorEvent)(commandobject)).getNotification());
+			    	continue;
+			    }
+			    
+			    //Check on exit
+			    if((commandobject.getCommand()).equals("EXIT")){
+			    	System.out.println(((ExitEvent)(commandobject)).getNotification());
+			    	break;
+			    }
 				
 				// send message to the server
 				outputStream.writeObject(commandobject);
@@ -128,9 +142,8 @@ String serverMessage;
 	public void process(Command input) throws IOException{
 	  String command = input.getCommand(); 
 	     
-	  if(command.equals("checkout")){
-	    	 //more is coming 
-	 
+	  if(command.equals("CHECKOUT")){
+	    	 serverMessage = "Repository check out succefull!";
 	     }
 	     else  if(command.equals("add")) {
 	    	 //more is coming 
@@ -158,6 +171,12 @@ String serverMessage;
 	    	 //more is coming 
 	    	
 	     }
+	  
+	     else if(command.equals("FileEvent")){
+	    	 downloadFiles();
+	    	 
+	    	 
+	     }
 	     else if(command.equals("ERROR")){
 	    	serverMessage = ((ErrorEvent) input).getNotification();
 	     }
@@ -165,15 +184,74 @@ String serverMessage;
 	    	 System.out.println("invalid command '" + input + "'");
 	     }
 	}
+	
+    /**
+     * Reading the FileEvent object and copying the file to disk.
+     */
+    public void downloadFiles() {
+        if (socket.isConnected()) {
+            try {
+            	  FileEvent fileEvent;
+            	  File dstFile = null;
+            	  FileOutputStream fileOutputStream = null;
+            	  boolean more = true;
+            	  while (more){
+                fileEvent = (FileEvent) inputStream.readObject();
+                if (fileEvent.getStatus().equalsIgnoreCase("Error")) {
+                    System.out.println("Error occurred ..with  file" + fileEvent.getFilename() + "at sending end ..");
+ 
+                }
+                String outputFile = fileEvent.getDestinationDirectory() + "/" + fileEvent.getFilename();
+                if (!new File(fileEvent.getDestinationDirectory()).exists()) {
+                    new File(fileEvent.getDestinationDirectory()).mkdirs();
+                }
+                dstFile = new File(outputFile);
+                fileOutputStream = new FileOutputStream(dstFile);
+                fileOutputStream.write(fileEvent.getFileData());
+                fileOutputStream.flush();
+                fileOutputStream.close();
+                System.out.println("Output file : " + outputFile + " is successfully saved ");
+                if (fileEvent.getRemainder() == 0) {
+                    System.out.println("Whole repository is copied...");
+                    more = false;
+                }
+            	  }
+            Command stop = (Command) inputStream.readObject();
+            if(stop.getCommand().equals("CHECKOUT")){
+            	serverMessage = "Checkout was Succesfull";
+            }
+                     
+            } catch (IOException e) {
+                e.printStackTrace();
+            } catch (ClassNotFoundException e) {
+                e.printStackTrace();
+            }
+        }
+    }
 
 	public Command prepare(String input) throws IOException{
 	     Scanner s = new Scanner(input);
+	     Command result = null;
+	     
+	     //test of de command line niet leeg is
+	     if (!input.isEmpty()){
 	     String command = s.next();
-	     String name = s.next();
-	     String result = null;
+	    
+	
 	     if(command.equals("checkout")){
+	    	 String name = s.next();
+	    	 //Go back to Homedirectory
+	    	client_repository.goToWorkingDir(clientreposfolder);
+	    	//look if asked repository already exists
+	    	if(client_repository.changeWorkingDir(name)){
+	    		result = new ErrorEvent("Cannot Checkout because asked repository already exists");	
+	    	} else {
+	    		//maak de repository aan in de homefolder
+	    		client_repository.createDir(name);
+	    		//stuur een CheckoutEvent naar de Server
+	    		result = new CheckoutEvent(name, client_repository.getWorkingDir() + "/" + name);
+	    	}	
 	    	 
-	 
 	     }
 	     else  if(command.equals("add")) {
 	    	 //prepare stream for an add
@@ -184,7 +262,8 @@ String serverMessage;
 	    	
 	     }
 	     else if(command.equals("create_repository")) {
-	    	return new NewRepositoryEvent(name);
+	    	 String name = s.next();
+	    	result = new NewRepositoryEvent(name);
 	     }
 	     else if(command.equals("update")) {
 	    	 //more is coming 
@@ -195,18 +274,17 @@ String serverMessage;
 	    	
 	     }
 	     else if(command.equals("diff")) {
-	    	 //more is coming 
-	    	
-	     }
-	     else if(command.equals("ERROR:")){
-	    	 
+	    	 //more is coming
 	     }
 	     else {
-	    	 System.out.println("invalid command '" + input + "'");
+	    	 
+	    	 //invalid command
+	         result = new ErrorEvent("invalid command '" + input + "'");
 	     }
-	     
-	     //tijdelijk
-		return null;
+	     }
+	     else {result = new ExitEvent();}
+		
+	     return result;
 	}
 
 
@@ -279,7 +357,7 @@ String serverMessage;
 		ClientVCS client = new ClientVCS();
 		client.connectToServer(ip, port);
 		
-		System.out.println("Client: terminating");
+		System.out.println("Client: Connection closed with server at "+ip+":"+ port);
 	}
 
 }
