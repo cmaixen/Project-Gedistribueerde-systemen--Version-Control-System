@@ -29,6 +29,8 @@ import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -42,6 +44,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Random;
 import java.util.Scanner;
+import java.util.UUID;
 import java.io.ObjectInputStream;
 
 import org.apache.commons.io.IOUtils;
@@ -71,6 +74,9 @@ public class ServerVCS  {
 	private String servername = "Serverrepos";
 	private String serverhomeDirectory = "./" +servername;
 	Command clientassignment;
+	private ObjectInputStream inputStream = null;
+	
+	private HashMap<UUID,CommitEvent> CommitTable =  new HashMap<UUID,CommitEvent>();
 	/**
 	 * Construct a new ServerVCS that listens on the given port.
 	 */
@@ -122,7 +128,7 @@ public class ServerVCS  {
 		private final Socket clientSocket;
 		private int id;
 		private ObjectOutputStream outputStream = null;
-		private ObjectInputStream inputStream = null;
+	
 		
 		public Session(Socket clientSocket, int id) {
 			this.id = id;
@@ -156,6 +162,9 @@ public class ServerVCS  {
 				
 				
 				while (true) {
+					
+			
+					
 					// read string from client
 					Command clientInput = (Command) inputStream.readObject();
 					
@@ -229,7 +238,6 @@ public class ServerVCS  {
 		            diStream = new DataInputStream(new FileInputStream(file));
 		            long len = (int) file.length();
 		            byte[] fileBytes = new byte[(int) len];
-		 
 		            int read = 0;
 		            int numRead = 0;
 		            while (read < fileBytes.length && (numRead = diStream.read(fileBytes, read,
@@ -252,7 +260,7 @@ public class ServerVCS  {
 		    }
 			
 			//gaat gevraagde command ,indien juist, uitvoeren en anders gaat hij de client verwittigen
-			public Command process(Command input) throws IOException{
+			public Command process(Command input) throws IOException, ClassNotFoundException{
 			    String command = input.getCommand();
 			    Command respons = null;
 			     if(command.equals("CHECKOUT")){
@@ -261,17 +269,28 @@ public class ServerVCS  {
 			    	 String reponame = ((CheckoutEvent) input).getName();
 			    	//locate files 
 			    	respons = locateFiles(reponame , dest);
-			    	 
+			     }
+			     else  if(command.equals("COMMIT_ACK")) {
+			    	 //downloaden van Files
+			    	 //eerste fileevent moet je meegeven
+			    	 downloadFiles();
 			    	 
 			     }
-			     else  if(command.equals("add")) {
-			    	 //more is coming 
-			    	 
-			     }
-			     else if(command.equals("commit")) {
-			    	 //more is coming 
-			    	
-			     }
+			     else if(command.equals("COMMIT")) {
+			    	 String destname = ((CommitEvent) input).getDestination();
+			    	 String comment = ((CommitEvent) input).getComment();
+			    	 ArrayList<String> listwfiles = ((CommitEvent) input).getCommitFiles();
+			    	 //stop commit met table in committable
+			    	 //genereer CommitID
+			         UUID commitnr = UUID.randomUUID();
+			         //steek UUID met Commitobject in Hashtable
+			         CommitTable.put(commitnr,(CommitEvent) input);
+			         //we gaan er van uit dat repository gewoon op de server staat
+			         server_repository.goToWorkingDir(serverhomeDirectory + "/" + destname);
+			         //neem eigelijke adres van server en geef mee aan commitevent
+						String dest = server_repository.getWorkingDir();
+						respons = new CommitEvent(comment,dest,listwfiles);
+					}
 			     else if(command.equals("create_repository")) {
 			    	 //create a new repository en creeer deze ook bij client
 			    	 NewRepositoryEvent newrepo = (NewRepositoryEvent) input;
@@ -282,8 +301,7 @@ public class ServerVCS  {
 			    	 //When the creation of a new directory fails and we get the boolean false back, we assume that the directory already exists.
 			    	 if (!create_repository(name_repo)){
 			    		 System.out.println("Server: ERROR: Cannot create new repository '" + name_repo + "'! It already exists!");
-			    		 respons = new ErrorEvent("repository already exists!");
-			    		 
+			    		 respons = new ErrorEvent("repository already exists!");	 
 			    	 }
 			    	 else{ 
 			    		 System.out.println("Server: New repository '" + name_repo + "' succefully created");
@@ -310,6 +328,42 @@ public class ServerVCS  {
 		
 	}
 	
+	
+	public void downloadFiles() throws IOException, ClassNotFoundException {
+		
+				FileEvent fileEvent;
+				File dstFile = null;
+				FileOutputStream fileOutputStream = null;
+				boolean more = true;
+				while (more){
+					System.out.println("you are here");
+					fileEvent = (FileEvent) inputStream.readObject();
+					System.out.println("you are here");
+					if (fileEvent.getStatus().equalsIgnoreCase("Error")) {
+						System.out.println("Error occurred ..with  file" + fileEvent.getFilename() + "at sending end ..");
+
+					}
+					String outputFile = fileEvent.getDestinationDirectory() + "/" + fileEvent.getFilename();
+					if (!new File(fileEvent.getDestinationDirectory()).exists()) {
+						new File(fileEvent.getDestinationDirectory()).mkdirs();
+					}
+					
+					dstFile = new File(outputFile);
+					fileOutputStream = new FileOutputStream(dstFile);
+					fileOutputStream.write(fileEvent.getFileData());
+					fileOutputStream.flush();
+					fileOutputStream.close();
+					System.out.println("Output file : " + outputFile + " is successfully saved ");
+					if (fileEvent.getRemainder() == 0) {
+						System.out.println("All Files are copied...");
+						more = false;
+					}
+				}
+			
+				}
+
+		
+
 	
 	
 	/**

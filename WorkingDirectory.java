@@ -44,6 +44,16 @@ public class WorkingDirectory {
 		return success;
 	}
 	
+	public boolean file_exists(String filename) throws IOException{
+		File f = new File(getWorkingDir() + "/" + filename);
+		return (f.exists() && !f.isDirectory());
+	}
+	
+	public File getFile(String filename) throws IOException{
+		File f = new File(getWorkingDir() + "/" + filename);
+			return f; 
+	}
+	
 	/**
 	 * Content of current directory
 	 * @return list of files

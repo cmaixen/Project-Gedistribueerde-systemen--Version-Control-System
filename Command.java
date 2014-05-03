@@ -10,6 +10,7 @@ public class Command  implements Serializable {
 	
 	private static final long serialVersionUID = 1L;
 	protected String Command;
+
 	
 	public String getCommand(){
 		return Command;
