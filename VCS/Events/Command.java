@@ -1,3 +1,4 @@
+package VCS.Events;
 import java.io.Serializable;
 
 /**

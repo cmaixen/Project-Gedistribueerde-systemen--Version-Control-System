@@ -1,10 +1,14 @@
+package VCS.Events;
+
 import java.io.Serializable;
+import java.util.UUID;
 
  
 public class FileEvent  extends Command  implements Serializable{
  
     public FileEvent() {
     	Command = "FileEvent";
+    	versionnumber = UUID.randomUUID();
     }
  
     private static final long serialVersionUID = 1L;
@@ -12,6 +16,7 @@ public class FileEvent  extends Command  implements Serializable{
     private String destinationDirectory;
     private String sourceDirectory;
     private String filename;
+    private UUID versionnumber;
     private long fileSize;
     private byte[] fileData;
     private String status;
@@ -20,6 +25,12 @@ public class FileEvent  extends Command  implements Serializable{
     public String getDestinationDirectory() {
         return destinationDirectory;
     }
+    
+    public UUID getVersionNumber() {
+        return versionnumber;
+    }
+    
+ 
  
     public void setDestinationDirectory(String destinationDirectory) {
         this.destinationDirectory = destinationDirectory;

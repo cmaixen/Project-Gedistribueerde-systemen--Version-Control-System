@@ -1,3 +1,5 @@
+package VCS.Events;
+
 import java.io.Serializable;
 
 public class Acknowledgement extends Command{
