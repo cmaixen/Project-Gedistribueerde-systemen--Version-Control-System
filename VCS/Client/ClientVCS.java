@@ -215,7 +215,7 @@ import VCS.Events.NewRepositoryEvent;
 						
 					}
 					else if(command.equals("ls")){
-						return new LocalEvent(Arrays.toString(client_repository.list()));
+						return new LocalEvent(Arrays.toString(Hide_MetaFiles_ls()));
 					}
 					else if(command.equals("list_repos")){
 						WorkingDirectory copydir = new WorkingDirectory(clientreposfolder);
@@ -240,7 +240,7 @@ import VCS.Events.NewRepositoryEvent;
 				String command = input.getCommand(); 
 
 				if(command.equals("CHECKOUT")){
-					serverMessage = "Repository check out succefull!";
+				serverMessage = "Repository check out succefull!";
 				}
 				else  if(command.equals("add")) {
 					//more is coming 
@@ -283,6 +283,7 @@ import VCS.Events.NewRepositoryEvent;
 				}
 			}
 
+		
 			/**
 			 * Reading the FileEvent object and copying the file to disk.
 			 */
@@ -291,6 +292,7 @@ import VCS.Events.NewRepositoryEvent;
 			public void downloadFiles() {
 				if (socket.isConnected()) {
 					try {
+						
 						FileEvent fileEvent;
 						File dstFile = null;
 						FileOutputStream fileOutputStream = null;
@@ -344,6 +346,14 @@ import VCS.Events.NewRepositoryEvent;
 				} else {
 					//maak de repository aan in de homefolder
 					client_repository.createDir(name);
+					//ga naar repo
+					client_repository.changeWorkingDir(name);
+					//zet current_repo op repository
+					current_repository = name;
+					//nieuwe metafile aanmaken
+					MetaFile = new MetaData();
+					//metafile opslagen
+					 saveMetaFile();
 					//stuur een CheckoutEvent naar de Server
 					return new CheckoutEvent(name, client_repository.getWorkingDir() + "/" + name);
 				}
@@ -528,7 +538,40 @@ import VCS.Events.NewRepositoryEvent;
 					e.printStackTrace();
 				}
 			}
-
+				
+				//voor sendFiles nuttig om overbodig info mee te sturen
+				public File[] Hide_MetaFiles(){
+					return Hide_MetaDataClient(Hide_OSX_Files());
+				}
+			
+				public File[] Hide_OSX_Files(){
+					File[] original = client_repository.listFiles();
+					ArrayList<File> list= new ArrayList<File>(Arrays.asList(original));
+					list.remove(".DS_Store");
+					File[] custom = list.toArray(new File[list.size()]);
+					return custom;
+				}
+				
+				
+				//wordt gebruikt voor "ls"
+				public String[] Hide_MetaFiles_ls(){
+					String[] original = client_repository.list();
+					ArrayList<String> list= new ArrayList<String>(Arrays.asList(original));
+					list.remove(".DS_Store");
+					list.remove(metafile);
+					String[] custom = list.toArray(new String[list.size()]);
+					return custom;
+				}
+				
+			
+				public File[] Hide_MetaDataClient(File[] original){
+					ArrayList<File> list= new ArrayList<File>(Arrays.asList(original));
+					list.remove(metafile);
+					File[] custom = list.toArray(new File[list.size()]);
+					return custom;
+					
+				}
+				
 			public void loadMetaFile() throws FileNotFoundException, IOException, ClassNotFoundException{
 				FileInputStream fis = new FileInputStream(client_repository.getWorkingDir() + "/" + metafile);
 				ObjectInputStream ois = new ObjectInputStream(fis);

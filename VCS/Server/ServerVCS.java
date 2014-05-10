@@ -5,6 +5,7 @@ All rights reserved.
 
  */
 
+import java.awt.List;
 import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.File;
@@ -21,6 +22,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Random;
 import java.util.Scanner;
@@ -105,59 +107,7 @@ public class ServerVCS {
 
 
 
-	//Procces Commands
 
-	//cre‘ren van een nieuwe repository
-	public Command Create_Repository(NewRepositoryEvent newrepo) throws IOException, ClassNotFoundException{
-		String name_repo = newrepo.getName();
-		//reset to homefolder
-		goHome();
-		//When the creation of a new directory fails and we get the boolean false back, we assume that the directory already exists.
-		if (!server_repository.createDir(name_repo)){
-			System.out.println("Server: ERROR: Cannot create new repository '" + name_repo + "'It already exists!");
-			return new ErrorEvent("repository already exists!");	 
-		}
-		else{ 
-			//create MetaFile and save      
-			MetaFile = new MetaDataServer();
-			System.out.println(MetaFile);
-			saveMetaFile(name_repo);
-			System.out.println("Server: New repository '" + name_repo + "' succefully created");
-			return newrepo;
-		}
-	}
-
-	//Zorgt voor de checkout
-	public Command Checkout(CheckoutEvent checkoutevent, ObjectOutputStream outputStream) throws IOException, ClassNotFoundException{
-		String dest = checkoutevent.getDestination();
-		String reponame = checkoutevent.getName();
-		//locate files  en hier een commitEvent uit.
-		if (locateFiles(reponame, dest, outputStream)){
-			return new CheckoutEvent(reponame, dest);
-		}
-		else { return new ErrorEvent("Source directory is not valid ...");
-		}
-	}
-
-
-	public Command Commit(CommitEvent commitevent, ObjectInputStream inputStream) throws IOException, ClassNotFoundException{
-		String destname = commitevent.getDestination();
-		String comment = commitevent.getComment();
-		System.out.println(comment);
-		ArrayList<String> listwfiles = commitevent.getCommitFiles();
-		//stop commit met table in committable
-		//genereer CommitID
-		UUID commitnr = UUID.randomUUID();
-		//ga naar repo en laad metafile;
-		gotoRepository(destname);
-		//toevoegen van commit aan Metafile
-		MetaFile.AddCommit(commitnr,commitevent);
-		//opslagen van Metafile
-		saveMetaFile(destname);
-		//downloaden van Files
-		downloadFiles(inputStream);
-		return new CommitEvent(comment,destname,listwfiles);
-	}
 
 
 
@@ -204,7 +154,7 @@ public class ServerVCS {
 					System.out.println("Server: client sent '" +
 							clientcommand + "'");
 					//process client input
-				clientassignment = process(clientInput, inputStream, outputStream);
+				clientassignment = process(clientInput);
 					//als clientassignment null is wilt dit zegge dat het een acknowledgment was en dat er niets moet worden weggeschreven
 					//en moet je gewoont terug op input wachten.
 					//if(clientassignment == null){
@@ -234,18 +184,18 @@ public class ServerVCS {
 				} catch (IOException e) { /* ignore */ }
 			}
 		}
-	}
+	
 
 	//gaat gevraagde command ,indien juist, uitvoeren en anders gaat hij de client verwittigen
-	public Command process(Command input, ObjectInputStream inputStream, ObjectOutputStream outputStream) throws IOException, ClassNotFoundException{
+	public Command process(Command input) throws IOException, ClassNotFoundException{
 		String command = input.getCommand();
 		
 		if(command.equals("CHECKOUT")){
-			return Checkout((CheckoutEvent) input, outputStream); 
+			return Checkout((CheckoutEvent) input); 
 		}
 		else if(command.equals("COMMIT")) {
 
-			return Commit((CommitEvent) input, inputStream);
+			return Commit((CommitEvent) input);
 
 		}
 		else if(command.equals("create_repository")) {
@@ -308,36 +258,39 @@ public class ServerVCS {
 	}
 
 	//moet nog aangepast worden
-	public boolean locateFiles(String name,String sourceDestination,ObjectOutputStream outputStream) throws IOException, ClassNotFoundException {
-		boolean respons;
-		int fileCount;
+	public Command locateFiles(String name,String sourceDestination) throws IOException, ClassNotFoundException {
 
+		int fileCount;
 		//ga eerst naar de homedir
 		goHome();
 		//kijk nu of path/map bestaat
 		if(!server_repository.changeWorkingDir(name)){
-			//respons = new ErrorEvent("Source directory is not valid ...");
-			respons = false;
+			return  new ErrorEvent("Source directory is not valid ...");
+
 		}
 		else {
 			String sourceDirectory = server_repository.getWorkingDir();
-			File[] files = server_repository.listFiles();
+			File[] files = Hide_MetaFiles();
 			fileCount = files.length;
-			//if (fileCount == 0) {
-			//     System.out.println("Empty directory ..Exiting the client");
-			//		        }
-			for (int i = 0; i < fileCount; i++) {
-				System.out.println("Server: Sending " + files[i].getAbsolutePath());
-				sendFile(files[i].getAbsolutePath(), fileCount - i - 1, sourceDirectory, sourceDestination, outputStream);
-
+			System.out.println(fileCount);
+			if (fileCount == 0) {
+				return new CheckoutEvent(name, sourceDestination);
 			}
-			//respons = new CheckoutEvent(name, sourceDestination);
-			respons = true;
+			else	{
+				for (int i = 0; i < fileCount; i++) {
+					System.out.println("Server: Sending " + files[i].getAbsolutePath());
+					sendFile(files[i].getAbsolutePath(), fileCount - i - 1, sourceDirectory, sourceDestination);
+				}
+				return new CheckoutEvent(name, sourceDestination);
+			}
+
 		}
-		return respons;
 	}
 
-	public void sendFile(String fileName, int index, String sourceDirectory, String sourceDestination, ObjectOutputStream  outputStream) {
+		
+
+
+	public void sendFile(String fileName, int index, String sourceDirectory, String sourceDestination) {
 		FileEvent fileEvent = new FileEvent();
 		fileEvent.setDestinationDirectory(sourceDestination);
 		fileEvent.setSourceDirectory(sourceDirectory);
@@ -411,8 +364,81 @@ public class ServerVCS {
             ex.printStackTrace();
         }             
     }
+	
+	public File[] Hide_MetaFiles() throws IOException{
+		return Hide_MetaDataServer(Hide_OSX_Files());
+	}
+	
+	public File[] Hide_OSX_Files() throws IOException{
+	
+		File[] original = server_repository.listFiles();
+		ArrayList<File> list= new ArrayList<File>(Arrays.asList(original));
+		File file = new File(server_repository.getWorkingDir() + "/" + ".DS_Store");
+		list.remove(file);
+		File[] custom = list.toArray(new File[list.size()]);
+		return custom;
+		}
+	
+	public File[] Hide_MetaDataServer(File[] original) throws IOException{
+		ArrayList<File> list= new ArrayList<File>(Arrays.asList(original));
+		File file = new File(server_repository.getWorkingDir() + "/" + metafile);
+		list.remove(file);
+		File[] custom = list.toArray(new File[list.size()]);
+		return custom;	
+	}
+	
+	//Procces Commands
+
+	//cre‘ren van een nieuwe repository
+	public Command Create_Repository(NewRepositoryEvent newrepo) throws IOException, ClassNotFoundException{
+		String name_repo = newrepo.getName();
+		//reset to homefolder
+		goHome();
+		//When the creation of a new directory fails and we get the boolean false back, we assume that the directory already exists.
+		if (!server_repository.createDir(name_repo)){
+			System.out.println("Server: ERROR: Cannot create new repository '" + name_repo + "'It already exists!");
+			return new ErrorEvent("repository already exists!");	 
+		}
+		else{ 
+			//create MetaFile and save      
+			MetaFile = new MetaDataServer();
+			System.out.println(MetaFile);
+			saveMetaFile(name_repo);
+			System.out.println("Server: New repository '" + name_repo + "' succefully created");
+			return newrepo;
+		}
+	}
+
+	//Zorgt voor de checkout
+	public Command Checkout(CheckoutEvent checkoutevent) throws IOException, ClassNotFoundException{
+		String dest = checkoutevent.getDestination();
+		String reponame = checkoutevent.getName();
+		//locate files  en hier een commitEvent uit.
+		return locateFiles(reponame, dest);
+	
+	}
 
 
+	public Command Commit(CommitEvent commitevent) throws IOException, ClassNotFoundException{
+		String destname = commitevent.getDestination();
+		String comment = commitevent.getComment();
+		System.out.println(comment);
+		ArrayList<String> listwfiles = commitevent.getCommitFiles();
+		//stop commit met table in committable
+		//genereer CommitID
+		UUID commitnr = UUID.randomUUID();
+		//ga naar repo en laad metafile;
+		gotoRepository(destname);
+		//toevoegen van commit aan Metafile
+		MetaFile.AddCommit(commitnr,commitevent);
+		//opslagen van Metafile
+		saveMetaFile(destname);
+		//downloaden van Files
+		downloadFiles(inputStream);
+		return new CommitEvent(comment,destname,listwfiles);
+	}
+
+	}
 
 
 	/**
@@ -446,3 +472,4 @@ public class ServerVCS {
 	}
 
 }
+	
