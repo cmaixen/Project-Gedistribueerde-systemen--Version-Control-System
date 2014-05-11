@@ -155,11 +155,12 @@ public class ServerVCS {
 							clientcommand + "'");
 					//process client input
 				clientassignment = process(clientInput);
-					//als clientassignment null is wilt dit zegge dat het een acknowledgment was en dat er niets moet worden weggeschreven
-					//en moet je gewoont terug op input wachten.
-					//if(clientassignment == null){
-					//	continue;
-					//s}
+					
+				//als clientassignment null is wilt dit zegge dat het een acknowledgment was en dat er niets moet worden weggeschreven
+				//en moet je gewoont terug op input wachten.
+				  if(clientassignment == null){
+						continue;
+					}
 					
 					System.out.println("write");
 					// send back the string to the client
@@ -194,6 +195,7 @@ public class ServerVCS {
 			return Checkout((CheckoutEvent) input); 
 		}
 		else if(command.equals("COMMIT")) {
+			
 
 			return Commit((CommitEvent) input);
 
@@ -201,6 +203,10 @@ public class ServerVCS {
 		else if(command.equals("create_repository")) {
 			//create a new repository en creeer deze ook bij client
 			return Create_Repository((NewRepositoryEvent) input);
+		}
+		else if(command.equals("FileEvent")){
+			downloadFiles((FileEvent) input);
+			return null;
 		}
 		else if(command.equals("update")) {
 			//more is coming 
@@ -222,39 +228,59 @@ public class ServerVCS {
 
 
 
-	public void downloadFiles(ObjectInputStream inputStream) throws IOException, ClassNotFoundException {
+	public void downloadFiles(FileEvent givenfileEvent) {
+		
 		FileEvent fileEvent;
+		boolean argument_evaluated = false;
 		File dstFile = null;
 		FileOutputStream fileOutputStream = null;
 		boolean more = true;
-
+try {
+	String dest = givenfileEvent.getDestinationDirectory();
+	//navigeer naar deze gewenste repo
+	gotoRepository(dest);
+	System.out.println(MetaFile);
 		while (more){
+			
+			//Eerste argument mag niet vergeten worden daarmee voeren we deze kleine test in.
+			if (argument_evaluated){
 			fileEvent = (FileEvent) inputStream.readObject();
+			}
+			else{ fileEvent = givenfileEvent;
+					argument_evaluated = true;}
+			
 			if (fileEvent.getStatus().equalsIgnoreCase("Error")) {
 				System.out.println("Error occurred ..with  file" + fileEvent.getFilename() + "at sending end ..");
 			}
+			//Filenumber
 			String versionnumber = (fileEvent.getVersionNumber()).toString();
+			//filename voor de gebruiker
 			String filename = fileEvent.getFilename();
-			String realfilename = filename + " " + versionnumber;
-			String outputFile = fileEvent.getDestinationDirectory() + "/" + realfilename;
+			//filename voor het systeem
+			String realfilename = versionnumber + "_" + filename;
+			//output voor op hardeschijf
+			String outputFile = server_repository.getWorkingDir() + "/" + realfilename;
 			dstFile = new File(outputFile);
 			fileOutputStream = new FileOutputStream(dstFile);
 			fileOutputStream.write(fileEvent.getFileData());
 			fileOutputStream.flush();
 			fileOutputStream.close();
 			System.out.println("Output file : " + outputFile + " is successfully saved ");
-			//update recent file zodat je weet dat die je recentste revisie is
-			MetaFile.AddRecentFile(filename, realfilename);
-			//linking tussen filename en recentste revisie updaten;
+			//laatste revisie van file toevoegen aan indexering
 			MetaFile.Addfile(filename, fileEvent.getVersionNumber());
-			//MetaFile opslagen
-			saveMetaFile(fileEvent.getDestinationDirectory());
 			if (fileEvent.getRemainder() == 0) {
+				//dest is de gewenste repo.
+				saveMetaFile(dest);
 				System.out.println("All Files are copied...");
 				more = false;
 			}
 		}
-
+} catch (IOException e) {
+	e.printStackTrace();
+} catch (ClassNotFoundException e) {
+	// TODO Auto-generated catch block
+	e.printStackTrace();
+}
 	}
 
 	//moet nog aangepast worden
@@ -279,7 +305,9 @@ public class ServerVCS {
 			else	{
 				for (int i = 0; i < fileCount; i++) {
 					System.out.println("Server: Sending " + files[i].getAbsolutePath());
-					sendFile(files[i].getAbsolutePath(), fileCount - i - 1, sourceDirectory, sourceDestination);
+					String filename =  files[i].getName();
+					UUID versionnumberr = MetaFile.GetUUID(filename);
+					sendFile(files[i].getAbsolutePath(), fileCount - i - 1, sourceDirectory, sourceDestination, versionnumberr);
 				}
 				return new CheckoutEvent(name, sourceDestination);
 			}
@@ -290,13 +318,14 @@ public class ServerVCS {
 		
 
 
-	public void sendFile(String fileName, int index, String sourceDirectory, String sourceDestination) {
+	public void sendFile(String fileName, int index, String sourceDirectory, String sourceDestination, UUID versionnumber) {
 		FileEvent fileEvent = new FileEvent();
 		fileEvent.setDestinationDirectory(sourceDestination);
 		fileEvent.setSourceDirectory(sourceDirectory);
 		File file = new File(fileName);
 		fileEvent.setFilename(file.getName());
 		fileEvent.setRemainder(index);
+		fileEvent.setVersionnumber(versionnumber);
 		DataInputStream diStream = null;
 		try {
 			diStream = new DataInputStream(new FileInputStream(file));
@@ -324,11 +353,16 @@ public class ServerVCS {
 	}
 
 	public void loadMetaFile() throws FileNotFoundException, IOException, ClassNotFoundException{
+		try{
 		FileInputStream fis = new FileInputStream(server_repository.getWorkingDir() + "/" + metafile);
 		ObjectInputStream ois = new ObjectInputStream(fis);
 		MetaFile = (MetaDataServer) ois.readObject();
 		ois.close();
+	}catch(IOException e){
+		e.printStackTrace();
 	}
+	}
+	
 	//wraps loading repo en metafile in one
 	public boolean gotoRepository(String reponame) throws IOException, ClassNotFoundException{
 		Boolean succes = server_repository.goToWorkingDir(serverhomeDirectory + "/" + reponame);
@@ -433,8 +467,6 @@ public class ServerVCS {
 		MetaFile.AddCommit(commitnr,commitevent);
 		//opslagen van Metafile
 		saveMetaFile(destname);
-		//downloaden van Files
-		downloadFiles(inputStream);
 		return new CommitEvent(comment,destname,listwfiles);
 	}
 

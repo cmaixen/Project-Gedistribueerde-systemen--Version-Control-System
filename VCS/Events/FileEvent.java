@@ -75,6 +75,10 @@ public class FileEvent  extends Command  implements Serializable{
     public void setFileData(byte[] fileData) {
         this.fileData = fileData;
     }
+    
+    public void setVersionnumber(UUID givenversionnumber){
+    	versionnumber = givenversionnumber;
+    }
  
     public int getRemainder() {
         return remainder;
