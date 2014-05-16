@@ -88,6 +88,7 @@ public class ServerVCS {
 		serverSocket.bind(serverAddress);
 		if (!server_repository.changeWorkingDir(servername)){
 			server_repository.createDir(servername);
+			server_repository.changeWorkingDir(servername);
 		}
 	}
 
@@ -129,7 +130,7 @@ public class ServerVCS {
 			this.id = id;
 			this.clientSocket = clientSocket;
 		}
-
+			
 		/**
 		 * Handles communication with a single client.
 		 * 
@@ -162,10 +163,10 @@ public class ServerVCS {
 							clientcommand + "'");
 					//process client input
 				clientassignment = process(clientInput);
-					
+					System.out.println(clientassignment);
 				//als clientassignment null is wilt dit zegge dat het een acknowledgment was en dat er niets moet worden weggeschreven
 				//en moet je gewoont terug op input wachten.
-				  if(clientassignment == null){
+				 if(clientassignment == null){
 						continue;
 					}
 					
@@ -196,6 +197,7 @@ public class ServerVCS {
 
 	//gaat gevraagde command ,indien juist, uitvoeren en anders gaat hij de client verwittigen
 	public Command process(Command input) throws IOException, ClassNotFoundException{
+		System.out.println("het print");
 		String command = input.getCommand();
 		
 		if(command.equals("CHECKOUT")){
@@ -212,6 +214,7 @@ public class ServerVCS {
 			return GetCommits((GetCommitsEvent) input);	
 		}
 		else if(command.equals("create_repository")) {
+	
 			//create a new repository en creeer deze ook bij client
 			return Create_Repository((NewRepositoryEvent) input);
 		}
@@ -470,7 +473,7 @@ public ArrayList<String> Hide_MetaFiles(ArrayList<String> list){
 	
 	//Procces Commands
 
-	//creâ€˜ren van een nieuwe repository
+	//cre‘ren van een nieuwe repository
 	public Command Create_Repository(NewRepositoryEvent newrepo) throws IOException, ClassNotFoundException{
 		String name_repo = newrepo.getName();
 		//reset to homefolder
@@ -486,7 +489,7 @@ public ArrayList<String> Hide_MetaFiles(ArrayList<String> list){
 			System.out.println(MetaFile);
 			saveMetaFile(name_repo);
 			System.out.println("Server: New repository '" + name_repo + "' succefully created");
-			return newrepo;
+			return new NewRepositoryEvent(name_repo);
 		}
 	}
 
@@ -551,7 +554,7 @@ public ArrayList<String> Hide_MetaFiles(ArrayList<String> list){
 		String destname = commitevent.getDestination();
 		String comment = commitevent.getComment();
 		boolean force = commitevent.getForce();
-		System.out.println(comment);
+		
 		ArrayList<String> listwfiles = commitevent.getCommitFiles();
 		ArrayList<UUID> old_UUIDlist = commitevent.GetOldUUIDList();
 
@@ -564,16 +567,22 @@ public ArrayList<String> Hide_MetaFiles(ArrayList<String> list){
 		int index = 0;
 		// Controleerd of repo up to date was
 		//indien niet, dan wordt de commit als ongeldig verklaard.
+		//als de repo nog geen files had moet je kijken of er al files waren op de server indien deze er zijn wilt dit zeggen dat de repo outdated is
+		System.out.println(comment);	
+		System.out.println("oldlist:"  + old_UUIDlist);
+	
 		for(UUID uuid : old_UUIDlist){
 			String filename = listwupdatedfiles[index];
 			//We vragen de previous uuid op, omdat we met filevent al hebben opgeslagen en in de table hebben geupdate
 			UUID previous_uuid = MetaFile.GetPreviousUUID(filename);
-			if(!uuid.equals(previous_uuid)){
+			System.out.println("Previous UUID :" + previous_uuid);
+			if(!(previous_uuid == null || uuid.equals(previous_uuid))){
 				commit_invalid = true;
 			}
 
 		}
 	}
+		
 
 		//is true als het niet geforced wordt en er een outdated file wordt gecommit
 		if(commit_invalid){

@@ -18,12 +18,12 @@ public class MetaData implements Serializable {
 	
 	public void add(String filename){
 		//Als file al in lijst zit om te commmiten, moet deze niet terug worden toegevoegd
-		if (!hasAlreadyFile(filename)){
+		//if (!hasAlreadyFile(filename)){
 		//voeg to aan lijst
 		AddList.add(filename);
 		//update revisienummer in hashtable
-		update(filename);
-		}
+		//update(filename);
+		//}
 	}
 	
 	

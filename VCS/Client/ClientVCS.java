@@ -47,6 +47,7 @@ import VCS.Events.GetEvent;
 import VCS.Events.LocalEvent;
 import VCS.Events.UpdateEvent;
 import VCS.Events.NewRepositoryEvent;
+import VCS.Server.GetRevisionsEvent;
 
 /**
  * A Version Control System Client
@@ -167,8 +168,6 @@ public class ClientVCS{
 				outputStream.flush();
 
 
-
-
 				System.out.println("Client: sent '" + message + "'");
 
 				// wait for and read the reply of the server
@@ -178,9 +177,10 @@ public class ClientVCS{
 				process(serverReply);
 
 				//log the string on the local console
+				if(serverMessage != null){
 				System.out.println("Client: server replied '" +
 						serverMessage + "'");
-
+				}
 			} while (true);
 
 		} finally {
@@ -202,14 +202,16 @@ public class ClientVCS{
 			}
 			else  if(command.equals("add")) {
 				String filename = s.next();
+				while (s.hasNext()) {
+				   filename =  filename + s.next();
+				}
 				//controleren of file wel bestaat
 				return Prepare_Add(filename);
 			}
 			//moet nog nagekeken worden
-			else  if(command.equals("untrack")) {
+			else  if(command.equals("get_revisions")) {
 				String filename = s.next();
-				MetaFile.remove(filename);
-				return new LocalEvent("File " + filename + "succesfully untracked");
+				return new GetRevisionsEvent(current_repository, filename);
 			}
 			else if (command.equals("logs")){
 				return new GetCommitsEvent(current_repository);
@@ -273,6 +275,13 @@ public class ClientVCS{
 			serverMessage = "Repository check out succefull!";
 		}
 		else if(command.equals("COMMIT")) {
+			//Filetable Updaten
+			ArrayList<String> listwithcommitfiles = ((CommitEvent) input).getCommitFiles();
+			UUID uuid_commit = ((CommitEvent) input).getCommitUUID();
+			for(String file : listwithcommitfiles){
+				MetaFile.add(file, uuid_commit);
+			}
+			
 			//ToCommitlijst leegmaken
 			MetaFile.Committed();
 			serverMessage = "Succesfully recieved your commit.";
@@ -289,6 +298,24 @@ public class ClientVCS{
 		else if(command.equals("diff")) {
 			//more is coming 
 
+		}
+		else if (command.equals("GETREVISIONS")){
+			GetRevisionsEvent revisionsevent = ((GetRevisionsEvent) input);
+			ArrayList<UUID> revisions = revisionsevent.getRevisionlist();
+			ArrayList<Timestamp> timestamps = revisionsevent.getRevisionlist_time();
+			
+			int counter = 0;
+			Timestamp[] arraytimestamp = timestamps.toArray(new Timestamp[timestamps.size()]);
+			//printen van revisies
+			System.out.println("Revisions of " + revisionsevent.GetFilename());
+			System.out.println("");
+			for(UUID uuid : revisions){
+			System.out.println("# " + arraytimestamp[counter] + "		" + uuid);
+			counter++;
+			}
+			
+			serverMessage = "Revisions succesfully found";	
+			
 		}
 		else if(command.equals("CONFLICT")){
 			ConflictEvent conflictevent = ((ConflictEvent) input);
@@ -313,6 +340,7 @@ public class ClientVCS{
 				}
 				else if(Message.equals("n")){
 					loop = false;
+					serverMessage = "Conflict succesfully resolved";	
 				}
 				else {
 					System.out.println("Invalid answer, please answer with y or n.");
@@ -457,15 +485,17 @@ public class ClientVCS{
 			return new ErrorEvent("There is nothing to commit");
 		}
 		else{//opvragen wat men moet sturen naar de server
-			ArrayList<String> commitlist =  MetaFile.ToCommit();
+			//commit UUID
+			UUID uuid_commit = UUID.randomUUID();
 			ArrayList<UUID> old_UUIDlist = new ArrayList<UUID>();
-			for(String file : commitlist){
+			
+			for(String file : listwithcommitfiles){
 				old_UUIDlist.add(MetaFile.GetUUID(file));
 			}
-			System.out.println(commitlist);
-			UUID uuid_commit = UUID.randomUUID();
+			System.out.println(listwithcommitfiles);
+			
 			//Files sturen naar de server
-			locateFiles(current_repository, commitlist, destination,uuid_commit);
+			locateFiles(current_repository, listwithcommitfiles , destination,uuid_commit);
 			return new CommitEvent(comment, destination,listwithcommitfiles,uuid_commit, old_UUIDlist, force);
 		}
 	}

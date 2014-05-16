@@ -37,7 +37,7 @@ public class GetRevisionsEvent extends Command implements Serializable {
 	}
 
 	public GetRevisionsEvent (String repo, String file){
-	Command = "GETREVISION";
+	Command = "GETREVISIONS";
 	Repo = repo;
 	File = file;
 	}

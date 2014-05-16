@@ -13,20 +13,20 @@ public class CommitEvent extends Command {
 	private String destinationDirectory;
 	private ArrayList<String> files;
 	private ArrayList<UUID> old_uuidlist;
-	private Timestamp timestamp;
+	private  Date date = new Date();
+	private Timestamp timestamp = new Timestamp(date.getTime());
 	private UUID commitUUID;
 	private boolean Force;
 	//Constructors
-	public CommitEvent(String comment, String destination, ArrayList<String> commitfiles, UUID uuid_commit, ArrayList<UUID> old_uuidlist, boolean force){
+	public CommitEvent(String comment, String destination, ArrayList<String> commitfiles, UUID uuid_commit, ArrayList<UUID> given_old_uuidlist, boolean force){
 		Comment = comment;
 		Command = "COMMIT";
 		destinationDirectory = destination;
 		files = commitfiles;
 		commitUUID = uuid_commit;
+		old_uuidlist = given_old_uuidlist;
 		Force = force;
-		
-	     Date date = new Date();
-	     timestamp = new Timestamp(date.getTime());
+	   
 	}
 	
 	//Accesoren
