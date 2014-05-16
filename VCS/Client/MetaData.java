@@ -32,6 +32,9 @@ public class MetaData implements Serializable {
 		FileTable.put(filename, uuid);
 	}
 	
+	public void remove(String filename){
+		FileTable.remove(filename);
+	}
 	
 	//geeft queue terug met daarin alle files die toegevoegd zijn aan de repository
 	public ArrayList<String> ToCommit(){
@@ -66,4 +69,11 @@ public class MetaData implements Serializable {
 		    }
 		    return false;
 		}
+	
+	public UUID GetUUID(String name){
+		return FileTable.get(name);
+		
+	}
+	
+
 }

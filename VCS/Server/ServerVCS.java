@@ -21,26 +21,33 @@ import java.io.PrintWriter;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Map.Entry;
 import java.util.Random;
 import java.util.Scanner;
+import java.util.Set;
 import java.util.UUID;
 import java.io.ObjectInputStream;
 
 import org.apache.commons.io.IOUtils;
 
+import VCS.Events.CommitEvent;
 import VCS.API.FileTransfer;
 import VCS.API.WorkingDirectory;
 import VCS.Events.Acknowledgement;
 import VCS.Events.CheckoutEvent;
 import VCS.Events.Command;
 import VCS.Events.CommitEvent;
+import VCS.Events.ConflictEvent;
 import VCS.Events.ErrorEvent;
 import VCS.Events.FileEvent;
+import VCS.Events.GetCommitsEvent;
 import VCS.Events.GetEvent;
 import VCS.Events.NewRepositoryEvent;
+import VCS.Events.UpdateEvent;
 
 
 /**
@@ -195,10 +202,14 @@ public class ServerVCS {
 			return Checkout((CheckoutEvent) input); 
 		}
 		else if(command.equals("COMMIT")) {
-			
-
 			return Commit((CommitEvent) input);
 
+		}
+		else if (command.equals("GETREVISIONS")){
+			return GetRevisions((GetRevisionsEvent) input);
+		}	
+		else if (command.equals("LOGS")){
+			return GetCommits((GetCommitsEvent) input);	
 		}
 		else if(command.equals("create_repository")) {
 			//create a new repository en creeer deze ook bij client
@@ -208,16 +219,15 @@ public class ServerVCS {
 			downloadFiles((FileEvent) input);
 			return null;
 		}
-		else if(command.equals("update")) {
-			//more is coming 
-			return null;
-		}
-		else if(command.equals("status")) {
-			//more is coming 
-			return null;
+		else if(command.equals("UPDATE")) {
+			String destrepo = ((UpdateEvent) input).GetReponame();
+			//laden van metadate en ga naar die repo
+			gotoRepository(destrepo);
+			return Update((UpdateEvent) input);
 		}
 		else if(command.equals("diff")) {
 			//more is coming 
+			//doorsturen van Delta
 			return null;
 		}
 		else {
@@ -283,39 +293,68 @@ try {
 }
 	}
 
-	//moet nog aangepast worden
-	public Command locateFiles(String name,String sourceDestination) throws IOException, ClassNotFoundException {
 
-		int fileCount;
-		//ga eerst naar de homedir
-		goHome();
-		//kijk nu of path/map bestaat
-		if(!server_repository.changeWorkingDir(name)){
-			return  new ErrorEvent("Source directory is not valid ...");
+	public Command Update(UpdateEvent event) throws ClassNotFoundException{
+		HashMap<String,UUID> hashmap = event.Get_Files_To_Update();
+		ArrayList<String> Files_to_update =  new ArrayList<String>();
+		String reponame = event.GetReponame();
+		String destinationsource = event.GetDestination();
 
-		}
-		else {
-			String sourceDirectory = server_repository.getWorkingDir();
-			File[] files = Hide_MetaFiles();
-			fileCount = files.length;
-			System.out.println(fileCount);
-			if (fileCount == 0) {
-				return new CheckoutEvent(name, sourceDestination);
-			}
-			else	{
-				for (int i = 0; i < fileCount; i++) {
-					System.out.println("Server: Sending " + files[i].getAbsolutePath());
-					String filename =  files[i].getName();
-					UUID versionnumberr = MetaFile.GetUUID(filename);
-					sendFile(files[i].getAbsolutePath(), fileCount - i - 1, sourceDirectory, sourceDestination, versionnumberr);
-				}
-				return new CheckoutEvent(name, sourceDestination);
-			}
+		System.out.println("Before Update:" + hashmap );
+		Set<Entry<String,UUID>> set = hashmap.entrySet();
+		 for(Entry<String,UUID> entry : set){
+		 	String filename = entry.getKey();
+		 	UUID old_uuid =  entry.getValue();
+		 	UUID recent_uuid =  MetaFile.GetUUID(filename);
 
-		}
+		 	if (!recent_uuid.equals(old_uuid)){
+		 		hashmap.put(filename, recent_uuid);
+		 		Files_to_update.add(filename);
+		 	}
+		 }
+		System.out.println("After Update:" + hashmap);
+		locateFiles(reponame,Files_to_update,destinationsource);
+		 return new UpdateEvent(hashmap, destinationsource, reponame);
 	}
 
-		
+public boolean locateFiles(String name, ArrayList<String> Files_to_locate,String sourceDestination) throws ClassNotFoundException {
+		try{
+			//ga naar repo
+			gotoRepository(name);
+			int fileCount;
+			boolean result = true;
+			String sourceDirectory = server_repository.getWorkingDir();
+			//file array aanmaken
+			ArrayList<File> filelist = new ArrayList<File>();
+			for(String filename : Files_to_locate) {
+				String realfilename = (MetaFile.GetUUID(filename)).toString() + "_" + filename;
+				System.out.println(realfilename);
+				filelist.add(server_repository.getFile(realfilename));
+			}
+
+			System.out.println(filelist);
+			//file versturen
+			fileCount = filelist.size();
+			int counter = 0;
+			for (File file : filelist) {
+				System.out.println("Server: Sending " + file.getAbsolutePath());
+				String filename = file.getName();
+				//files staat in table met de naam voor de gebruiker dus filename ontleden
+				//op server files zijn als volgt gevormd: UUID + _ + filename
+				String tablename = (filename.split("_"))[1];
+				UUID versionnumber = MetaFile.GetUUID(tablename);
+				sendFile(file.getAbsolutePath(), fileCount - counter - 1, sourceDirectory, sourceDestination, versionnumber);
+				counter++;
+			}
+			return result;
+		} catch(IOException e){
+			e.printStackTrace();
+			return false;
+		}
+}
+
+
+
 
 
 	public void sendFile(String fileName, int index, String sourceDirectory, String sourceDestination, UUID versionnumber) {
@@ -323,7 +362,9 @@ try {
 		fileEvent.setDestinationDirectory(sourceDestination);
 		fileEvent.setSourceDirectory(sourceDirectory);
 		File file = new File(fileName);
-		fileEvent.setFilename(file.getName());
+		String filename = file.getName();
+		String client_filename = (filename.split("_"))[1];
+		fileEvent.setFilename(client_filename);
 		fileEvent.setRemainder(index);
 		fileEvent.setVersionnumber(versionnumber);
 		DataInputStream diStream = null;
@@ -399,6 +440,12 @@ try {
         }             
     }
 	
+public ArrayList<String> Hide_MetaFiles(ArrayList<String> list){
+	list.remove(metafile);
+	list.remove("DS_Store");
+	return list;
+}
+
 	public File[] Hide_MetaFiles() throws IOException{
 		return Hide_MetaDataServer(Hide_OSX_Files());
 	}
@@ -423,7 +470,7 @@ try {
 	
 	//Procces Commands
 
-	//cre‘ren van een nieuwe repository
+	//creâ€˜ren van een nieuwe repository
 	public Command Create_Repository(NewRepositoryEvent newrepo) throws IOException, ClassNotFoundException{
 		String name_repo = newrepo.getName();
 		//reset to homefolder
@@ -447,27 +494,118 @@ try {
 	public Command Checkout(CheckoutEvent checkoutevent) throws IOException, ClassNotFoundException{
 		String dest = checkoutevent.getDestination();
 		String reponame = checkoutevent.getName();
-		//locate files  en hier een commitEvent uit.
-		return locateFiles(reponame, dest);
+		if(!gotoRepository(reponame)){
+			return new ErrorEvent("Source directory is not valid ...");
+		}
+		else {
+
+			//lijst opstellen met te transferen files zonder de metadata
+
+		ArrayList<String> files_to_transfer = new ArrayList<String>(Arrays.asList(server_repository.list()));
+		files_to_transfer = Hide_MetaFiles(files_to_transfer);
 	
+
+		//locate files  en hier een commitEvent uit.
+		locateFiles(reponame, files_to_transfer,dest);
+		return new CheckoutEvent(reponame,dest);	
+		}			
 	}
 
+	public Command GetRevisions(GetRevisionsEvent revision) throws IOException, ClassNotFoundException{
+		String repo = revision.GetRepository();
+		//ga naar repo
+		gotoRepository(repo);
+		//vraag revisies op
+		String filename = revision.GetFilename();
+		ArrayList<UUID> revisionlist = MetaFile.GetRevisions(filename);
+		ArrayList<Timestamp> revisionlist_time = new ArrayList<Timestamp>();
+
+
+		if (revisionlist == null){
+			return new ErrorEvent("File does not exist");
+		}
+		else {revision.setRevisionlist(revisionlist);
+			for(UUID uuid : revisionlist){
+				revisionlist_time.add(MetaFile.GetTimestamp(uuid));
+				
+				revision.setRevisionlist_time(revisionlist_time);
+			}
+
+			}
+		return revision; }
+	
+
+
+	public Command GetCommits(GetCommitsEvent getcommitevent) throws IOException, ClassNotFoundException{
+		String repo = getcommitevent.GetRepository();
+		//ga naar repo
+		gotoRepository(repo);
+
+		HashMap<UUID,CommitEvent> CommitTable = MetaFile.GetCommitTable();
+		getcommitevent.SetCommitTable(CommitTable);
+		return getcommitevent;
+	}
+	
 
 	public Command Commit(CommitEvent commitevent) throws IOException, ClassNotFoundException{
 		String destname = commitevent.getDestination();
 		String comment = commitevent.getComment();
+		boolean force = commitevent.getForce();
 		System.out.println(comment);
 		ArrayList<String> listwfiles = commitevent.getCommitFiles();
+		ArrayList<UUID> old_UUIDlist = commitevent.GetOldUUIDList();
+
+		boolean commit_invalid = false;
+
+		//als de commit niet geforceerd moet worden
+		if(!force){
+			
+		String[] listwupdatedfiles = listwfiles.toArray(new String[listwfiles.size()]);
+		int index = 0;
+		// Controleerd of repo up to date was
+		//indien niet, dan wordt de commit als ongeldig verklaard.
+		for(UUID uuid : old_UUIDlist){
+			String filename = listwupdatedfiles[index];
+			//We vragen de previous uuid op, omdat we met filevent al hebben opgeslagen en in de table hebben geupdate
+			UUID previous_uuid = MetaFile.GetPreviousUUID(filename);
+			if(!uuid.equals(previous_uuid)){
+				commit_invalid = true;
+			}
+
+		}
+	}
+
+		//is true als het niet geforced wordt en er een outdated file wordt gecommit
+		if(commit_invalid){
+			remove_invalid_commit(listwfiles);
+			return new ConflictEvent(commitevent, "You're repositiory wasn't up to date. There were some files who are updated by another client. \n Do you like to commit your outdated files as a new revision?(y/n)");
+		}else{
 		//stop commit met table in committable
-		//genereer CommitID
-		UUID commitnr = UUID.randomUUID();
+		//krijg CommitID
+		UUID commitnr = commitevent.getCommitUUID();
 		//ga naar repo en laad metafile;
 		gotoRepository(destname);
 		//toevoegen van commit aan Metafile
 		MetaFile.AddCommit(commitnr,commitevent);
 		//opslagen van Metafile
 		saveMetaFile(destname);
-		return new CommitEvent(comment,destname,listwfiles);
+		return new CommitEvent(comment,destname,listwfiles, commitnr, old_UUIDlist, force);
+	}
+
+	}
+	
+	public void remove_invalid_commit(ArrayList<String> listcommitedfiles){
+		//verwijderen van opgeslagen files
+		//van iedere file de laatste uuid opzoeken
+		// file opzoeken door filename op te zoeken door combinatie filename uuid
+		for(String filename : listcommitedfiles){
+			UUID uuid = MetaFile.GetUUID(filename);
+			String realname = uuid.toString() + "_" + filename;
+			File file = new File(realname);
+			file.delete();
+			MetaFile.RemoveVersion(filename,uuid);
+		}
+		
 	}
 
 	}

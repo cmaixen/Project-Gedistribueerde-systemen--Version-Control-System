@@ -1,6 +1,6 @@
 package VCS.Client;
 
-
+import difflib.*;
 
 import java.io.BufferedReader;
 import java.io.DataInputStream;
@@ -8,6 +8,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -19,11 +20,14 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.sql.Timestamp;
 import java.util.AbstractQueue;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Scanner;
 import java.util.Set;
@@ -34,11 +38,14 @@ import VCS.API.WorkingDirectory;
 import VCS.Events.CheckoutEvent;
 import VCS.Events.Command;
 import VCS.Events.CommitEvent;
+import VCS.Events.ConflictEvent;
 import VCS.Events.ErrorEvent;
 import VCS.Events.ExitEvent;
 import VCS.Events.FileEvent;
+import VCS.Events.GetCommitsEvent;
 import VCS.Events.GetEvent;
 import VCS.Events.LocalEvent;
+import VCS.Events.UpdateEvent;
 import VCS.Events.NewRepositoryEvent;
 
 /**
@@ -61,6 +68,8 @@ public class ClientVCS{
 	private String metafile = "MetaVCS";
 	private MetaData MetaFile = null;
 	private String current_repository = null;
+	private String force_command = null;
+	private boolean force = false;
 
 	//output messages of the server get adjusted by applied methodes that react on original message from server
 	Command serverReply;
@@ -130,7 +139,7 @@ public class ClientVCS{
 				//check on navigation
 				if((commandobject.getCommand().equals("LOCAL"))){
 					System.out.println(((LocalEvent) commandobject).getNotification());
-					//skip one loop
+					//skip one loop	
 					continue;
 				}
 				//check on valid Command
@@ -196,6 +205,15 @@ public class ClientVCS{
 				//controleren of file wel bestaat
 				return Prepare_Add(filename);
 			}
+			//moet nog nagekeken worden
+			else  if(command.equals("untrack")) {
+				String filename = s.next();
+				MetaFile.remove(filename);
+				return new LocalEvent("File " + filename + "succesfully untracked");
+			}
+			else if (command.equals("logs")){
+				return new GetCommitsEvent(current_repository);
+			}
 			else if(command.equals("commit")) {
 				String comment = Check_if_Comment(s);
 				//Files die gecommit moeten worden
@@ -207,18 +225,16 @@ public class ClientVCS{
 				return new NewRepositoryEvent(name);
 			}
 			else if(command.equals("update")) {
-				//more is coming 
-				return null;
+				return Prepare_UpdateEvent();
 			}
 			else if(command.equals("status")) {
 				//more is coming 
 				return Prepare_StatusEvent();
 
 			}
-			else if(command.equals("diff")) {
-				//more is coming
-				return null;
-			}
+		//	else if(command.equals("diff")) {
+			//	return Prepare_DiffEvent();
+			//}
 			else if(command.equals("change_repo")){
 				String repo = s.next();
 				return Change_Repo(repo);
@@ -247,17 +263,16 @@ public class ClientVCS{
 	}
 
 	public void process(Command input) throws IOException{
+		
+		//reset force
+		force = false;
+
 		String command = input.getCommand(); 
 
 		if(command.equals("CHECKOUT")){
 			serverMessage = "Repository check out succefull!";
 		}
-		else  if(command.equals("add")) {
-			//more is coming 
-
-		}
 		else if(command.equals("COMMIT")) {
-
 			//ToCommitlijst leegmaken
 			MetaFile.Committed();
 			serverMessage = "Succesfully recieved your commit.";
@@ -268,19 +283,62 @@ public class ClientVCS{
 			String name_repo = newrepo.getName();
 			Create_Repository(name_repo);	 
 		}
-		else if(command.equals("update")) {
-			//more is coming 
-
-		}
-		else if(command.equals("status")) {
-
-
+		else if(command.equals("UPDATE")) {
+			serverMessage = "Update was Succesfull";	
 		}
 		else if(command.equals("diff")) {
 			//more is coming 
 
 		}
+		else if(command.equals("CONFLICT")){
+			ConflictEvent conflictevent = ((ConflictEvent) input);
+			String Message = conflictevent.GetMessage();
+			System.out.println(Message);
 
+			//Bufferreader for consoleinput
+			BufferedReader consoleInput = new BufferedReader(
+					new InputStreamReader(System.in));
+
+			boolean loop =  true;
+			while(loop){
+				System.out.print(PROMPT);
+				Message = consoleInput.readLine();
+				if(Message.equals("y")){
+					//userinput wordt overgeslagen in volgende cyclus  
+					force = true;
+					//user input is geldig
+					loop = false;
+					//force commando dat dan zonder input moet worden verzonden.
+					force_command = conflictevent.GetTypeEvent();
+				}
+				else if(Message.equals("n")){
+					loop = false;
+				}
+				else {
+					System.out.println("Invalid answer, please answer with y or n.");
+				}
+			}
+		}
+		
+		else if(command.equals("LOGS")){
+			
+			Set<Entry<UUID, CommitEvent>> commitset = (((GetCommitsEvent) input).GetCommitTable()).entrySet();
+			
+			for(Map.Entry<UUID, CommitEvent> entry : commitset){
+				
+				UUID uuid = entry.getKey();
+				CommitEvent commitevent =  entry.getValue();
+				Timestamp timestamp = commitevent.getTimestamp();
+				ArrayList<String> commited_files = commitevent.getCommitFiles();
+				String comment = commitevent.getComment();
+				System.out.println("#	Commit: " + uuid);
+				System.out.println("#	Date: " + timestamp);
+				System.out.println("#	Commited Files: " + commited_files);
+				System.out.println("#");
+				System.out.println("#" + comment);
+			}
+			
+		}
 		else if(command.equals("FileEvent")){
 			downloadFiles((FileEvent) input);
 
@@ -400,10 +458,15 @@ public class ClientVCS{
 		}
 		else{//opvragen wat men moet sturen naar de server
 			ArrayList<String> commitlist =  MetaFile.ToCommit();
+			ArrayList<UUID> old_UUIDlist = new ArrayList<UUID>();
+			for(String file : commitlist){
+				old_UUIDlist.add(MetaFile.GetUUID(file));
+			}
 			System.out.println(commitlist);
+			UUID uuid_commit = UUID.randomUUID();
 			//Files sturen naar de server
-			locateFiles(current_repository, commitlist, destination);
-			return new CommitEvent(comment, destination,listwithcommitfiles);
+			locateFiles(current_repository, commitlist, destination,uuid_commit);
+			return new CommitEvent(comment, destination,listwithcommitfiles,uuid_commit, old_UUIDlist, force);
 		}
 	}
 
@@ -425,10 +488,14 @@ public class ClientVCS{
 
 
 	//Voorbereiden van UpdateEvent
-	public Command Prepare_UpdateEvent(){
-		//not implemented yet
-		return null;
+	public Command Prepare_UpdateEvent() throws IOException{
+		//opvragen van al de files met al hun versies
+		HashMap<String,UUID> repofiles = MetaFile.GetFileTable();
+		//gaat het pad van de reposi
+		String Destinationpad = client_repository.getWorkingDir();
+        return new UpdateEvent(repofiles, Destinationpad , current_repository);
 	}
+
 
 	//Voorbereiden van StatusEvent
 	public Command Prepare_StatusEvent(){
@@ -482,11 +549,37 @@ public class ClientVCS{
 		}
 		return new LocalEvent("");
 	}
+    private static List<String> fileToLines(String filename) {
+        List<String> lines = new LinkedList<String>();
+        String line = "";
+        try {
+                BufferedReader in = new BufferedReader(new FileReader(filename));
+                while ((line = in.readLine()) != null) {
+                        lines.add(line);
+                }
+        } catch (IOException e) {
+                e.printStackTrace();
+        }
+        return lines;
+}
 
-	public Command Prepare_DiffEvent(){
-		//not implemented yet
-		return null;
-	}
+	public Command Prepare_DiffEvent(String original_file, String revised_file){
+	       		
+	       			// Helper method for get the file content
+	                List<String> original = fileToLines(original_file);
+	                List<String> revised  = fileToLines(revised_file);
+	                
+	                // Compute diff. Get the Patch object. Patch is the container for computed deltas.
+	                Patch patch = DiffUtils.diff(original, revised);
+
+	                for (Delta delta: patch.getDeltas()) {
+	                        System.out.println(delta);
+	                }
+	                return new LocalEvent("");
+	        }
+
+	
+	
 
 	//veranderen van repository
 	public Command Change_Repo(String repo) throws FileNotFoundException, IOException, ClassNotFoundException{
@@ -552,7 +645,7 @@ public class ClientVCS{
 	}
 
 	//wordt gebruikt om het schrijven naar de server voor te bereiden en dan te schrijven.
-	public boolean locateFiles(String name, ArrayList<String> commitlist,String sourceDestination) {
+	public boolean locateFiles(String name, ArrayList<String> commitlist,String sourceDestination, UUID uuid_commit) {
 		try{
 			int fileCount;
 			boolean result = true;
@@ -566,7 +659,7 @@ public class ClientVCS{
 
 			for (File file : filelist) {
 				System.out.println("Client: Sending " + file.getAbsolutePath());
-				sendFile(file.getAbsolutePath(), fileCount - counter - 1, sourceDirectory, sourceDestination);
+				sendFile(file.getAbsolutePath(), fileCount - counter - 1, sourceDirectory, sourceDestination,uuid_commit);
 				counter++;
 			}
 			return result;
@@ -576,13 +669,14 @@ public class ClientVCS{
 		}
 	}
 
-	public void sendFile(String fileName, int index, String sourceDirectory, String sourceDestination) {
+	public void sendFile(String fileName, int index, String sourceDirectory, String sourceDestination, UUID uuid_commit){
 		FileEvent fileEvent = new FileEvent();
 		fileEvent.setDestinationDirectory(sourceDestination);
 		fileEvent.setSourceDirectory(sourceDirectory);
 		File file = new File(fileName);
 		fileEvent.setFilename(file.getName());
 		fileEvent.setRemainder(index);
+		fileEvent.setVersionnumber(uuid_commit);
 		DataInputStream diStream = null;
 		try {
 			diStream = new DataInputStream(new FileInputStream(file));

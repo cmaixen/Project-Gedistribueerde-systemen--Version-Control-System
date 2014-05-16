@@ -1,5 +1,6 @@
 package VCS.Server;
 import java.io.Serializable;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.UUID;	
@@ -18,7 +19,7 @@ public class MetaDataServer implements Serializable {
 	/**
 	 * 
 	 */
-	private static final long serialVersionUID = 1L;
+	private static final long serialVersionUID = 2L;
 
 
 	private HashMap<UUID,CommitEvent> CommitTable = new HashMap<UUID,CommitEvent>();
@@ -62,5 +63,31 @@ public class MetaDataServer implements Serializable {
 		int size = fileindex.size();
 		return fileindex.get(size - 1);
 	}
+	public UUID GetPreviousUUID(String filename){
+		ArrayList<UUID> fileindex = Fileindex.get(filename);
+		//geef het achterste UUID terug, dat is de recentste
+		System.out.println(fileindex);
+		int size = fileindex.size();
+		return fileindex.get(size - 2);
+	}
+	
+	public Timestamp GetTimestamp(UUID uuid){
+		CommitEvent commitevent = CommitTable.get(uuid);
+		return commitevent.getTimestamp();		
+	}
 
+	public void RemoveVersion(String filename, UUID uuid){
+		Fileindex.remove(uuid);
+	}
+
+//geeft verschillende revisies terug
+public ArrayList<UUID> GetRevisions(String File){
+	
+	return Fileindex.get(File);
+	
+}	
+
+public HashMap<UUID,CommitEvent> GetCommitTable(){
+	return CommitTable;
+}
 }
