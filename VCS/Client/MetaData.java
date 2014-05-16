@@ -74,6 +74,4 @@ public class MetaData implements Serializable {
 		return FileTable.get(name);
 		
 	}
-	
-
 }

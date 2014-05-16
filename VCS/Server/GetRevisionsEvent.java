@@ -16,6 +16,7 @@ public class GetRevisionsEvent extends Command implements Serializable {
 	private String File;
 	private String Repo;
 	private ArrayList<Timestamp> Revisionlist_time;
+
 	private ArrayList<UUID> Revisionlist;
 	
 	public ArrayList<Timestamp> getRevisionlist_time() {
@@ -30,8 +31,9 @@ public class GetRevisionsEvent extends Command implements Serializable {
 	}
 	
 
-	public void setRevisionlist(ArrayList<UUID> revisionlist) {
-		Revisionlist = revisionlist;
+
+	public void setRevisionlist(ArrayList<UUID> revisionlist2) {
+		Revisionlist = revisionlist2;
 	}
 
 	public GetRevisionsEvent (String repo, String file){
