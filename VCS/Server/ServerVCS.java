@@ -42,6 +42,7 @@ import org.apache.commons.io.IOUtils;
 import difflib.Delta;
 import difflib.DiffUtils;
 import difflib.Patch;
+import VCS.Client.AESencrypt;
 import VCS.Client.DiffEvent;
 import VCS.Events.CommitEvent;
 import VCS.API.FileTransfer;
@@ -195,6 +196,9 @@ public class ServerVCS {
 			} catch (ClassNotFoundException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 			} finally {
 				// tear down communication
 				System.err.println("Server: closing client connection");
@@ -206,7 +210,7 @@ public class ServerVCS {
 	
 
 	//gaat gevraagde command ,indien juist, uitvoeren en anders gaat hij de client verwittigen
-	public Command process(Command input) throws IOException, ClassNotFoundException{
+	public Command process(Command input) throws Exception{
 		System.out.println("het print");
 		String command = input.getCommand();
 		
@@ -292,7 +296,7 @@ public class ServerVCS {
 
 	
 
-	public void downloadFiles(FileEvent givenfileEvent) {
+	public void downloadFiles(FileEvent givenfileEvent) throws Exception {
 		
 		FileEvent fileEvent;
 		boolean argument_evaluated = false;
@@ -326,7 +330,8 @@ try {
 			String outputFile = server_repository.getWorkingDir() + "/" + realfilename;
 			dstFile = new File(outputFile);
 			fileOutputStream = new FileOutputStream(dstFile);
-			fileOutputStream.write(fileEvent.getFileData());
+			byte[] decryptedoutput = AESencrypt.decrypt(fileEvent.getFileData());
+			fileOutputStream.write(decryptedoutput);
 			fileOutputStream.flush();
 			fileOutputStream.close();
 			System.out.println("Output file : " + outputFile + " is successfully saved ");
@@ -431,9 +436,12 @@ public boolean locateFiles(String name, ArrayList<String> Files_to_locate,String
 			while (read < fileBytes.length && (numRead = diStream.read(fileBytes, read,
 					fileBytes.length - read)) >= 0) {
 				read = read + numRead;
-			}
+			
+			//encrypt Data
+			fileBytes = AESencrypt.encrypt(fileBytes);
 			fileEvent.setFileData(fileBytes);
 			fileEvent.setStatus("Success");
+			}
 		} catch (Exception e) {
 			e.printStackTrace();
 			fileEvent.setStatus("Error");

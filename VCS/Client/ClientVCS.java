@@ -186,6 +186,9 @@ public class ClientVCS{
 				}
 			} while (true);
 
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		} finally {
 			// tear down communication
 			socket.close();
@@ -300,7 +303,7 @@ try {
 	
 	}
 
-	public void process(Command input) throws IOException{
+	public void process(Command input) throws Exception{
 		
 		//reset force
 		force = false;
@@ -432,10 +435,11 @@ try {
 
 	/**
 	 * Reading the FileEvent object and copying the file to disk.
+	 * @throws Exception 
 	 */
 
 	//wordt gebruikt voor de Checkout
-	public void downloadFiles(FileEvent givenfileEvent) {
+	public void downloadFiles(FileEvent givenfileEvent) throws Exception {
 		if (socket.isConnected()) {
 			try {
 				boolean argument_evaluated = false;
@@ -462,7 +466,8 @@ try {
 
 					dstFile = new File(outputFile);
 					fileOutputStream = new FileOutputStream(dstFile);
-					fileOutputStream.write(fileEvent.getFileData());
+					byte[] decryptedoutput = AESencrypt.decrypt(fileEvent.getFileData());
+					fileOutputStream.write(decryptedoutput);
 					fileOutputStream.flush();
 					fileOutputStream.close();
 					//toevoegen van file aan metafile
@@ -746,9 +751,12 @@ try {
 			while (read < fileBytes.length && (numRead = diStream.read(fileBytes, read,
 					fileBytes.length - read)) >= 0) {
 				read = read + numRead;
-			}
-			fileEvent.setFileData(fileBytes);
+				
+				//encrypt Data
+				fileBytes = AESencrypt.encrypt(fileBytes);
+				fileEvent.setFileData(fileBytes);
 			fileEvent.setStatus("Success");
+			}
 		} catch (Exception e) {
 			e.printStackTrace();
 			fileEvent.setStatus("Error");
