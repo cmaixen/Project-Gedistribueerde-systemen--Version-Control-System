@@ -3,12 +3,14 @@ package VCS.Client;
 import difflib.*;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -47,6 +49,7 @@ import VCS.Events.GetEvent;
 import VCS.Events.LocalEvent;
 import VCS.Events.UpdateEvent;
 import VCS.Events.NewRepositoryEvent;
+import VCS.Server.ArgumentException;
 import VCS.Server.GetRevisionsEvent;
 
 /**
@@ -188,64 +191,92 @@ public class ClientVCS{
 			socket.close();
 		}
 	}
+	
+	//Check on arguments
+	public void CheckonArguments(int amount,String input) throws ArgumentException{
+		Scanner s = new Scanner(input);
+		//remove command;
+		s.next();
+		int counter = amount;
+		while(counter!= 0){
+			if(!s.hasNext()){
+				throw new ArgumentException();
+			}
+			s.next();
+			--counter;
+		}
+		
+		if(s.hasNext()){
+			throw new ArgumentException();
+		}
+		
+	}
 
 	public Command prepare(String input) throws IOException, ClassNotFoundException, InterruptedException{
 		Scanner s = new Scanner(input);
 		//test of de command line niet leeg is
 		if (!input.isEmpty()){
+		
 			String command = s.next();
-
-			if(command.equals("checkout")){
+try {
+			if(command.equalsIgnoreCase("checkout")){
+				CheckonArguments(1, input);
 				String name = s.next();
 				return Prepare_Checkout(name);
 
 			}
-			else  if(command.equals("add")) {
+			else  if(command.equalsIgnoreCase("add")) {
+				CheckonArguments(1, input);
 				String filename = s.next();
 				while (s.hasNext()) {
-				   filename =  filename + s.next();
+				   filename =  filename + " " + s.next();
 				}
 				//controleren of file wel bestaat
 				return Prepare_Add(filename);
 			}
 			//moet nog nagekeken worden
-			else  if(command.equals("get_revisions")) {
+			else  if(command.equalsIgnoreCase("get_revisions")) {
+				CheckonArguments(1, input);
 				String filename = s.next();
 				return new GetRevisionsEvent(current_repository, filename);
 			}
-			else if (command.equals("logs")){
+			else if (command.equalsIgnoreCase("logs")){
 				return new GetCommitsEvent(current_repository);
 			}
-			else if(command.equals("commit")) {
+			else if(command.equalsIgnoreCase("commit")) {
 				String comment = Check_if_Comment(s);
 				//Files die gecommit moeten worden
 				ArrayList<String> listwithcommitfiles = MetaFile.ToCommit();
 				return Prepare_CommitEvent(comment,current_repository,listwithcommitfiles);
 			}
-			else if(command.equals("create_repository")) {
+			else if(command.equalsIgnoreCase("create_repository")) {
+				CheckonArguments(1, input);
 				String name = s.next();
 				return new NewRepositoryEvent(name);
 			}
-			else if(command.equals("update")) {
+			else if(command.equalsIgnoreCase("update")) {
 				return Prepare_UpdateEvent();
 			}
-			else if(command.equals("status")) {
-				//more is coming 
+			else if(command.equalsIgnoreCase("status")) {
 				return Prepare_StatusEvent();
-
 			}
-		//	else if(command.equals("diff")) {
-			//	return Prepare_DiffEvent();
-			//}
-			else if(command.equals("change_repo")){
+		else if(command.equalsIgnoreCase("DIFF")) {
+			CheckonArguments(3, input);
+			String filename = s.next();
+			String original =  s.next();
+			String revised = s.next();
+			return Prepare_DiffEvent(filename, original , revised);
+			}
+			else if(command.equalsIgnoreCase("change_repo")){
+				CheckonArguments(1, input);
 				String repo = s.next();
 				return Change_Repo(repo);
 
 			}
-			else if(command.equals("ls")){
+			else if(command.equalsIgnoreCase("ls")){
 				return new LocalEvent(Arrays.toString(Hide_MetaFiles_ls()));
 			}
-			else if(command.equals("list_repos")){
+			else if(command.equalsIgnoreCase("list_repos")){
 				WorkingDirectory copydir = new WorkingDirectory(clientreposfolder);
 				//go back to Homefolder
 				copydir.goToWorkingDir(clientreposfolder);
@@ -253,15 +284,20 @@ public class ClientVCS{
 				return new LocalEvent(Arrays.toString(copydir.list())); 
 			}
 
-			else if(command.equals("current_repo")){
+			else if(command.equalsIgnoreCase("current_repo")){
 				return new LocalEvent(current_repository);
 			}
 			else {//invalid command
 				return new ErrorEvent("invalid command '" + input + "'");
 			}
+		}catch(ArgumentException e){
+			return new ErrorEvent(e.getErrorMessage());
 		}
+		}
+		
 		//als input leeg is sluit de client af
 		else {return new ExitEvent();}
+	
 	}
 
 	public void process(Command input) throws IOException{
@@ -295,9 +331,23 @@ public class ClientVCS{
 		else if(command.equals("UPDATE")) {
 			serverMessage = "Update was Succesfull";	
 		}
-		else if(command.equals("diff")) {
-			//more is coming 
+		else if(command.equals("DIFF")) {
+			
+			DiffEvent diffevent = ((DiffEvent) input);
+			LinkedList<String> original = diffevent.getOriginalResult();
+			LinkedList<String> revised = diffevent.getRevisedResult();
+			
+			System.out.println(original);
+			System.out.println(revised);
+			
+		    // Compute diff. Get the Patch object. Patch is the container for computed deltas.
+	        Patch patch = DiffUtils.diff(original, revised);
+	        for (Delta delta: patch.getDeltas()) {
+	                System.out.println(delta);
+	        }
+	        serverMessage = null;
 
+	        
 		}
 		else if (command.equals("GETREVISIONS")){
 			GetRevisionsEvent revisionsevent = ((GetRevisionsEvent) input);
@@ -363,7 +413,7 @@ public class ClientVCS{
 				System.out.println("#	Date: " + timestamp);
 				System.out.println("#	Commited Files: " + commited_files);
 				System.out.println("#");
-				System.out.println("#" + comment);
+				System.out.println("#	" + comment);
 			}
 			
 		}
@@ -579,33 +629,11 @@ public class ClientVCS{
 		}
 		return new LocalEvent("");
 	}
-    private static List<String> fileToLines(String filename) {
-        List<String> lines = new LinkedList<String>();
-        String line = "";
-        try {
-                BufferedReader in = new BufferedReader(new FileReader(filename));
-                while ((line = in.readLine()) != null) {
-                        lines.add(line);
-                }
-        } catch (IOException e) {
-                e.printStackTrace();
-        }
-        return lines;
-}
 
-	public Command Prepare_DiffEvent(String original_file, String revised_file){
+	public Command Prepare_DiffEvent(String filename, String original_file,String revised_file){
 	       		
-	       			// Helper method for get the file content
-	                List<String> original = fileToLines(original_file);
-	                List<String> revised  = fileToLines(revised_file);
-	                
-	                // Compute diff. Get the Patch object. Patch is the container for computed deltas.
-	                Patch patch = DiffUtils.diff(original, revised);
-
-	                for (Delta delta: patch.getDeltas()) {
-	                        System.out.println(delta);
-	                }
-	                return new LocalEvent("");
+		return new  DiffEvent(filename,original_file, revised_file,current_repository);
+	       
 	        }
 
 	
@@ -793,7 +821,7 @@ public class ClientVCS{
 		}
 		//verwijder metafile van untrackedfiles
 		untrackedfiles.remove(metafile);
-		untrackedfiles.remove("DS_Store");
+		untrackedfiles.remove(".DS_Store");
 		return untrackedfiles;
 	}
 

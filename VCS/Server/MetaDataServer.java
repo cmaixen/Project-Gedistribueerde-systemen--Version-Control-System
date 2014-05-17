@@ -100,6 +100,22 @@ public ArrayList<UUID> GetRevisions(String File){
 	
 }	
 
+//check of gegeven uuid bestaat
+public boolean CheckUUID(String filename, String uuid){
+	boolean succes = false;
+	
+	ArrayList<UUID> uuids = Fileindex.get(filename);
+	
+	for(UUID given_uuid : uuids){
+		if((given_uuid.toString()).equals(uuid)){
+			succes = true;
+		}
+		System.out.println(given_uuid.toString());
+		System.out.println(uuid);
+		
+	}
+		return succes;	
+}
 public HashMap<UUID,CommitEvent> GetCommitTable(){
 	return CommitTable;
 }

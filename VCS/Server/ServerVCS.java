@@ -7,11 +7,15 @@ All rights reserved.
 
 import java.awt.List;
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -26,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map.Entry;
+import java.util.LinkedList;
 import java.util.Random;
 import java.util.Scanner;
 import java.util.Set;
@@ -34,6 +39,10 @@ import java.io.ObjectInputStream;
 
 import org.apache.commons.io.IOUtils;
 
+import difflib.Delta;
+import difflib.DiffUtils;
+import difflib.Patch;
+import VCS.Client.DiffEvent;
 import VCS.Events.CommitEvent;
 import VCS.API.FileTransfer;
 import VCS.API.WorkingDirectory;
@@ -46,6 +55,7 @@ import VCS.Events.ErrorEvent;
 import VCS.Events.FileEvent;
 import VCS.Events.GetCommitsEvent;
 import VCS.Events.GetEvent;
+import VCS.Events.LocalEvent;
 import VCS.Events.NewRepositoryEvent;
 import VCS.Events.UpdateEvent;
 
@@ -200,38 +210,37 @@ public class ServerVCS {
 		System.out.println("het print");
 		String command = input.getCommand();
 		
-		if(command.equals("CHECKOUT")){
+		if(command.equalsIgnoreCase("CHECKOUT")){
 			return Checkout((CheckoutEvent) input); 
 		}
-		else if(command.equals("COMMIT")) {
+		else if(command.equalsIgnoreCase("COMMIT")) {
 			return Commit((CommitEvent) input);
 
 		}
-		else if (command.equals("GETREVISIONS")){
+		else if(command.equalsIgnoreCase("DIFF")){
+			
+			return Diff((DiffEvent) input);
+		}
+		else if (command.equalsIgnoreCase("GETREVISIONS")){
 			return GetRevisions((GetRevisionsEvent) input);
 		}	
-		else if (command.equals("LOGS")){
+		else if (command.equalsIgnoreCase("LOGS")){
 			return GetCommits((GetCommitsEvent) input);	
 		}
-		else if(command.equals("create_repository")) {
+		else if(command.equalsIgnoreCase("create_repository")) {
 	
 			//create a new repository en creeer deze ook bij client
 			return Create_Repository((NewRepositoryEvent) input);
 		}
-		else if(command.equals("FileEvent")){
+		else if(command.equalsIgnoreCase("FileEvent")){
 			downloadFiles((FileEvent) input);
 			return null;
 		}
-		else if(command.equals("UPDATE")) {
+		else if(command.equalsIgnoreCase("UPDATE")) {
 			String destrepo = ((UpdateEvent) input).GetReponame();
 			//laden van metadate en ga naar die repo
 			gotoRepository(destrepo);
 			return Update((UpdateEvent) input);
-		}
-		else if(command.equals("diff")) {
-			//more is coming 
-			//doorsturen van Delta
-			return null;
 		}
 		else {
 			System.out.print("Server: ERROR: invalid command '" +  input + "'" );
@@ -239,7 +248,49 @@ public class ServerVCS {
 		}
 	}
 
+	   private LinkedList<String> fileToLines(String path) {
+		   
+		  String realfilename =  path; 
+		   LinkedList<String> lines = new LinkedList<String>();
+	        String line = "";
+	        try {
+	                BufferedReader in = new BufferedReader(new FileReader(realfilename));
+	                while ((line = in.readLine()) != null) {
+	                	System.out.println("line printer:" + line);
+	                        lines.add(line);
+	                }
+	        } catch (IOException e) {
+	                e.printStackTrace();
+	        }
+	        return lines;
+	}
 
+	private Command Diff(DiffEvent diffevent) throws IOException, ClassNotFoundException {
+		
+		String filename = diffevent.getFilename();
+		String Repo = diffevent.getRepository();
+		String original_file = diffevent.getOriginal_file();
+		String revision_file = diffevent.getRevised_file();
+	
+		//ga naar repo
+		gotoRepository(Repo);
+		
+		//check if file already exist
+		if(!(MetaFile.CheckUUID(filename, original_file) && MetaFile.CheckUUID(filename, revision_file))){
+			return new ErrorEvent("Given revisions doesn't exist.");
+		}
+		else{
+			
+        LinkedList<String> original = fileToLines(server_repository.getWorkingDir() + "/" + original_file + "_" + filename);
+        LinkedList<String> revised  = fileToLines(server_repository.getWorkingDir() + "/" + revision_file + "_" + filename);
+        
+        diffevent.setOriginalResult(original);
+        diffevent.setRevisedResult(revised);
+        return diffevent;
+		}
+}
+
+	
 
 	public void downloadFiles(FileEvent givenfileEvent) {
 		
