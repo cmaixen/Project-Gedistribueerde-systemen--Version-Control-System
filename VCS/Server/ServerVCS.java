@@ -562,11 +562,10 @@ public ArrayList<String> Hide_MetaFiles(ArrayList<String> list){
 		else {
 
 			//lijst opstellen met te transferen files zonder de metadata
-
-		ArrayList<String> files_to_transfer = new ArrayList<String>(Arrays.asList(server_repository.list()));
+		ArrayList<String> files_to_transfer = new ArrayList<String>(Arrays.asList(MetaFile.GetFilesRepository()));
 		files_to_transfer = Hide_MetaFiles(files_to_transfer);
-	
-
+		
+		System.out.println(files_to_transfer);
 		//locate files  en hier een commitEvent uit.
 		locateFiles(reponame, files_to_transfer,dest);
 		return new CheckoutEvent(reponame,dest);	

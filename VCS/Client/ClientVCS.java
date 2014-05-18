@@ -461,12 +461,15 @@ try {
 
 					}
 
-
+System.out.println("Destination" + fileEvent.getDestinationDirectory() );
+System.out.println(fileEvent.getFilename());
 					String outputFile = fileEvent.getDestinationDirectory() + "/" + fileEvent.getFilename();
 
 					dstFile = new File(outputFile);
 					fileOutputStream = new FileOutputStream(dstFile);
+					System.out.println(fileEvent.getFileData());
 					byte[] decryptedoutput = AESencrypt.decrypt(fileEvent.getFileData());
+					System.out.println(decryptedoutput);
 					fileOutputStream.write(decryptedoutput);
 					fileOutputStream.flush();
 					fileOutputStream.close();
@@ -514,7 +517,7 @@ try {
 			//metafile opslagen
 			saveMetaFile();
 			//stuur een CheckoutEvent naar de Server
-			return new CheckoutEvent(name, client_repository.getWorkingDir() + "/" + name);
+			return new CheckoutEvent(name, client_repository.getWorkingDir());
 		}
 	}	
 

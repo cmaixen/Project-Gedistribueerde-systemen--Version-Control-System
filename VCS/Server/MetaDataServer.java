@@ -3,6 +3,7 @@ import java.io.Serializable;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Set;
 import java.util.UUID;	
 
 import VCS.Events.CommitEvent;
@@ -119,4 +120,10 @@ public boolean CheckUUID(String filename, String uuid){
 public HashMap<UUID,CommitEvent> GetCommitTable(){
 	return CommitTable;
 }
+
+public String[] GetFilesRepository(){
+	Set<String> set = Fileindex.keySet();
+return set.toArray(new String[set.size()]);
+}
+
 }
