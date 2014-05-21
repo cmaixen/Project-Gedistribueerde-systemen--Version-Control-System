@@ -14,19 +14,9 @@ public class GetCommitsEvent extends Command implements Serializable{
 	private HashMap<UUID, CommitEvent> CommitTable = null;
 	
 	private String Repo;
-	private int id;
-	public void setId(int id) {
-		this.id = id;
-	}
-
-	public int getId() {
-		return id;
-	}
-
 	public GetCommitsEvent(String repo){
 	Repo = repo;	
 	Command ="LOGS";
-	id = 5;
 }
 	
 	public void SetCommitTable(HashMap<UUID, CommitEvent> committable){
