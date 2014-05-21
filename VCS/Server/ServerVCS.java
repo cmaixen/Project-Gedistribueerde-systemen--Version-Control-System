@@ -2,26 +2,19 @@ package VCS.Server;
 /**
 Copyright (c) 2014, Yannick Merckx, Vrije Universiteit Brussel
 All rights reserved.
-
  */
 
-import java.awt.List;
+
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.io.OutputStream;
-import java.io.PrintWriter;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -29,86 +22,74 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Map.Entry;
 import java.util.LinkedList;
 import java.util.Random;
-import java.util.Scanner;
 import java.util.Set;
 import java.util.UUID;
-import java.io.ObjectInputStream;
-
-import org.apache.commons.io.IOUtils;
-
-import difflib.Delta;
-import difflib.DiffUtils;
-import difflib.Patch;
-import VCS.Client.AESencrypt;
-import VCS.Client.DiffEvent;
-import VCS.Events.CommitEvent;
-import VCS.API.FileTransfer;
+import VCS.API.AESencrypt;
 import VCS.API.WorkingDirectory;
-import VCS.Events.Acknowledgement;
 import VCS.Events.CheckoutEvent;
 import VCS.Events.Command;
 import VCS.Events.CommitEvent;
 import VCS.Events.ConflictEvent;
+import VCS.Events.DiffEvent;
 import VCS.Events.ErrorEvent;
 import VCS.Events.FileEvent;
 import VCS.Events.GetCommitsEvent;
-import VCS.Events.GetEvent;
-import VCS.Events.LocalEvent;
+import VCS.Events.GetRevisionsEvent;
 import VCS.Events.NewRepositoryEvent;
 import VCS.Events.UpdateEvent;
 
-
-/**
- * A simple echo server.
- * 
- * Once connected to a client, opens a session for that client where
- * strings are echoed back until the client closes the connection.
- * 
- * This is a multi-threaded server: it can serve requests from multiple
- * connected clients concurrently.
- * 
- * This server uses a single thread per client connection. As such,
- * it is not designed to serve thousands of users simultaneously.
- * 
- * This server must be explicitly terminated by the user.
- * 
- * Illustrates the use of TCP/IP sockets.
- */
 public class ServerVCS {
 	//  final variable
 	private final ServerSocket serverSocket;
 	private String metafile = "MetaServerCVS";
-	private MetaDataServer MetaFile = null;
-	private WorkingDirectory server_repository = new WorkingDirectory("./");
 	private String servername = "Serverrepos";
 	private String serverhomeDirectory = "./" +servername;
-
+	private WorkingDirectory Manager_repository = new WorkingDirectory("./");
+	private	HashMap<String, MetaDataServer> MetaDataList = new HashMap<String,MetaDataServer>();
 
 	/**
-	 * Construct a new ServerVCS that listens on the given port.
+	 * Construct van een nieuwe ServerVCS dat luistert naar de gegeven poort.
+	 * @throws ClassNotFoundException 
 	 */
-	public ServerVCS(int port) throws IOException {
+	public ServerVCS(int port) throws IOException, ClassNotFoundException {
 		//creates address (ip:port) for the server
 		InetSocketAddress serverAddress = new InetSocketAddress(port);
-		//bind unbound variable "serverSocket" to an unbound server socket
+		//bind variable aan socket
 		this.serverSocket = new ServerSocket();
-		//Serversocket gets bond to address
+		//Serversocket wordt gebonden aan adres
 		serverSocket.bind(serverAddress);
-		if (!server_repository.changeWorkingDir(servername)){
-			server_repository.createDir(servername);
-			server_repository.changeWorkingDir(servername);
+		//initialisatie;
+		if (!Manager_repository.changeWorkingDir(servername)){
+			Manager_repository.createDir(servername);
+			Manager_repository.changeWorkingDir(servername);
+		}
+		initialize_MetaDataList();
+		
+		
+	}
+	
+
+	private void initialize_MetaDataList() throws IOException, ClassNotFoundException {
+		//alle repos oplijsten
+		String[] repos = Manager_repository.list();
+		for(String repo : repos){
+			Manager_repository.changeWorkingDir(repo);
+			FileInputStream fis = new FileInputStream(Manager_repository.getWorkingDir() + "/" + metafile);
+			ObjectInputStream ois = new ObjectInputStream(fis);
+			MetaDataServer Metaobject = (MetaDataServer) ois.readObject();
+			ois.close();
+			MetaDataList.put(repo, Metaobject);
 		}
 	}
 
+
 	/**
-	 * Block and wait until a client arrives.
+	 * Blockt en wacht tot eerste client toekomt
 	 * 
-	 * Once a client arrives, start up a new Session Thread
-	 * that handles further communication with this client,
-	 * and returns immediately.
+	 * Eens de client toekomt, start men een nieuwe Sessie Thread
+	 * dat verdere communicatie behandeld
 	 * 
 	 * @throws IOException when unable to listen on the specified port.
 	 */
@@ -124,18 +105,14 @@ public class ServerVCS {
 		// return immediately
 	}
 
-
-
-
-
-
-
 	private class Session extends Thread {
 
 		private final Socket clientSocket;
 		private int id;
 		private ObjectOutputStream outputStream = null;
 		private ObjectInputStream inputStream = null;
+		private MetaDataServer MetaFile = null;	
+		private WorkingDirectory server_repository = new WorkingDirectory("./");
 
 		public Session(Socket clientSocket, int id) {
 			this.id = id;
@@ -143,12 +120,12 @@ public class ServerVCS {
 		}
 			
 		/**
-		 * Handles communication with a single client.
+		 * Behandelt communicatie met meerdere clients.
 		 * 
-		 * Listen for client requests and send back echoed replies.
+		 * Luisterd naar een client request en stuurt een event terug
 		 * 
-		 * Client and server sockets communicate via input and output streams,
-		 * as shown schematically below:
+		 * Client and server sockets communiceren via input en output streams,
+		 * als getoond beneden:
 		 * 
 		 * <pre>
 		 *   Client                             Server
@@ -160,6 +137,8 @@ public class ServerVCS {
 
 		public void run() {
 			try {
+				//ga naar server_repo
+				server_repository.changeWorkingDir(servername);
 				// get raw input and output streams
 				//create Objectstreams
 				outputStream = new ObjectOutputStream(clientSocket.getOutputStream());
@@ -252,6 +231,7 @@ public class ServerVCS {
 		}
 	}
 
+	//nodig om diff vlotter te laten werken
 	   private LinkedList<String> fileToLines(String path) {
 		   
 		  String realfilename =  path; 
@@ -269,6 +249,7 @@ public class ServerVCS {
 	        return lines;
 	}
 
+	   //DiffEvent verwerken op de server
 	private Command Diff(DiffEvent diffevent) throws IOException, ClassNotFoundException {
 		
 		String filename = diffevent.getFilename();
@@ -294,8 +275,7 @@ public class ServerVCS {
 		}
 }
 
-	
-
+	//het downloaden en opslagen van een file
 	public void downloadFiles(FileEvent givenfileEvent) throws Exception {
 		
 		FileEvent fileEvent;
@@ -330,7 +310,8 @@ try {
 			String outputFile = server_repository.getWorkingDir() + "/" + realfilename;
 			dstFile = new File(outputFile);
 			fileOutputStream = new FileOutputStream(dstFile);
-			byte[] decryptedoutput = AESencrypt.decrypt(fileEvent.getFileData());
+			byte[] decryptedoutput = fileEvent.getFileData();
+		//byte[] decryptedoutput = AESencrypt.decrypt(fileEvent.getFileData());
 			fileOutputStream.write(decryptedoutput);
 			fileOutputStream.flush();
 			fileOutputStream.close();
@@ -352,30 +333,22 @@ try {
 }
 	}
 
-
-	public Command Update(UpdateEvent event) throws ClassNotFoundException{
-		HashMap<String,UUID> hashmap = event.Get_Files_To_Update();
+	//Update Command verwerken op de server
+	public synchronized Command Update(UpdateEvent event) throws ClassNotFoundException{
+		HashMap<String, ArrayList<UUID>> hashmap = MetaFile.getFileindex();
 		ArrayList<String> Files_to_update =  new ArrayList<String>();
 		String reponame = event.GetReponame();
 		String destinationsource = event.GetDestination();
 
 		System.out.println("Before Update:" + hashmap );
-		Set<Entry<String,UUID>> set = hashmap.entrySet();
-		 for(Entry<String,UUID> entry : set){
-		 	String filename = entry.getKey();
-		 	UUID old_uuid =  entry.getValue();
-		 	UUID recent_uuid =  MetaFile.GetUUID(filename);
-
-		 	if (!recent_uuid.equals(old_uuid)){
-		 		hashmap.put(filename, recent_uuid);
-		 		Files_to_update.add(filename);
+		Set<String> set = hashmap.keySet();
+		for(String entry : set){
+		 		Files_to_update.add(entry);
 		 	}
-		 }
-		System.out.println("After Update:" + hashmap);
 		locateFiles(reponame,Files_to_update,destinationsource);
-		 return new UpdateEvent(hashmap, destinationsource, reponame);
+		 return event;
 	}
-
+//Het voorbereiden van de files en dan vervolgens verzenden
 public boolean locateFiles(String name, ArrayList<String> Files_to_locate,String sourceDestination) throws ClassNotFoundException {
 		try{
 			//ga naar repo
@@ -412,10 +385,7 @@ public boolean locateFiles(String name, ArrayList<String> Files_to_locate,String
 		}
 }
 
-
-
-
-
+//versturen van een file
 	public void sendFile(String fileName, int index, String sourceDirectory, String sourceDestination, UUID versionnumber) {
 		FileEvent fileEvent = new FileEvent();
 		fileEvent.setDestinationDirectory(sourceDestination);
@@ -438,7 +408,7 @@ public boolean locateFiles(String name, ArrayList<String> Files_to_locate,String
 				read = read + numRead;
 			
 			//encrypt Data
-			fileBytes = AESencrypt.encrypt(fileBytes);
+			//fileBytes = AESencrypt.encrypt(fileBytes);
 			fileEvent.setFileData(fileBytes);
 			fileEvent.setStatus("Success");
 			}
@@ -455,15 +425,9 @@ public boolean locateFiles(String name, ArrayList<String> Files_to_locate,String
 		}
 	}
 
-	public void loadMetaFile() throws FileNotFoundException, IOException, ClassNotFoundException{
-		try{
-		FileInputStream fis = new FileInputStream(server_repository.getWorkingDir() + "/" + metafile);
-		ObjectInputStream ois = new ObjectInputStream(fis);
-		MetaFile = (MetaDataServer) ois.readObject();
-		ois.close();
-	}catch(IOException e){
-		e.printStackTrace();
-	}
+	public synchronized void loadMetaFile()  throws FileNotFoundException, IOException, ClassNotFoundException{
+		String repo = server_repository.getcurrentfolder();
+		MetaFile = MetaDataList.get(repo);
 	}
 	
 	//wraps loading repo en metafile in one
@@ -479,9 +443,15 @@ public boolean locateFiles(String name, ArrayList<String> Files_to_locate,String
 		return succes;
 	}
 
-	public void saveMetaFile(String reponame) throws ClassNotFoundException{
+	
+	//het opslaan van een Metafile
+	//syncronised 2 threads kunnen nooit deze tegelijk gebruiken
+	public synchronized void saveMetaFile(String reponame) throws ClassNotFoundException{
 	
 		try{
+			//update Metafile in hashtable;
+			
+			System.out.println("old metafiel: " + MetaDataList.put(reponame, MetaFile));
 			//ga naar gewenste repository
 	    server_repository.goToWorkingDir(serverhomeDirectory + "/" + reponame);
 		File file = new File(server_repository.getWorkingDir() + "/" + metafile);
@@ -533,7 +503,7 @@ public ArrayList<String> Hide_MetaFiles(ArrayList<String> list){
 	//Procces Commands
 
 	//cre‘ren van een nieuwe repository
-	public Command Create_Repository(NewRepositoryEvent newrepo) throws IOException, ClassNotFoundException{
+	public synchronized Command Create_Repository(NewRepositoryEvent newrepo) throws IOException, ClassNotFoundException{
 		String name_repo = newrepo.getName();
 		//reset to homefolder
 		goHome();
@@ -543,8 +513,9 @@ public ArrayList<String> Hide_MetaFiles(ArrayList<String> list){
 			return new ErrorEvent("repository already exists!");	 
 		}
 		else{ 
-			//create MetaFile and save      
+			//create MetaFile and save 
 			MetaFile = new MetaDataServer();
+			MetaDataList.put(name_repo, MetaFile);
 			System.out.println(MetaFile);
 			saveMetaFile(name_repo);
 			System.out.println("Server: New repository '" + name_repo + "' succefully created");
@@ -601,14 +572,22 @@ public ArrayList<String> Hide_MetaFiles(ArrayList<String> list){
 		String repo = getcommitevent.GetRepository();
 		//ga naar repo
 		gotoRepository(repo);
-
-		HashMap<UUID,CommitEvent> CommitTable = MetaFile.GetCommitTable();
-		getcommitevent.SetCommitTable(CommitTable);
-		return getcommitevent;
+		
+		HashMap<UUID,CommitEvent> CommitTable =  MetaFile.GetCommitTable();
+		System.out.println("Committable" + CommitTable);
+		GetCommitsEvent output =  new GetCommitsEvent(repo);
+		output.SetCommitTable(CommitTable);
+		int number = new Random().nextInt();
+		System.out.println(number);
+		output.setId(number);
+		System.out.println("send Committable" + output.GetCommitTable());
+		
+		return output;
 	}
 	
-
-	public Command Commit(CommitEvent commitevent) throws IOException, ClassNotFoundException{
+	//voor een commit uit op de server
+	//is syncronized dus het gebruik van dezelfde resources wordt hier verhinderd
+	public synchronized Command Commit(CommitEvent commitevent) throws IOException, ClassNotFoundException{
 		String destname = commitevent.getDestination();
 		String comment = commitevent.getComment();
 		boolean force = commitevent.getForce();
@@ -634,14 +613,13 @@ public ArrayList<String> Hide_MetaFiles(ArrayList<String> list){
 			//We vragen de previous uuid op, omdat we met filevent al hebben opgeslagen en in de table hebben geupdate
 			UUID previous_uuid = MetaFile.GetPreviousUUID(filename);
 			System.out.println("Previous UUID :" + previous_uuid);
-			if(!(previous_uuid == null || uuid.equals(previous_uuid))){
+			if(!(previous_uuid == null || (uuid != null && uuid.equals(previous_uuid)))){
 				commit_invalid = true;
 			}
 
 		}
 	}
 		
-
 		//is true als het niet geforced wordt en er een outdated file wordt gecommit
 		if(commit_invalid){
 			remove_invalid_commit(listwfiles);
@@ -681,31 +659,29 @@ public ArrayList<String> Hide_MetaFiles(ArrayList<String> list){
 	/**
 	 * Usage: java ServerVCS port
 	 * 
-	 * Where port is the port on which the server should listen
-	 * for requests.
+	 * port is de poort waar de server naar moet luisteren
 	 * 
 	 * Example:
 	 *   java ServerVCS 6789
 	 *   
 	 * @throws IOException when unable to setup connection or communicate
 	 *         with the client. 
+	 * @throws ClassNotFoundException 
 	 */
-	public static void main(String[] args) throws IOException {
+	public static void main(String[] args) throws IOException, ClassNotFoundException {
 		if (args.length != 1) {
 			System.out.println("Usage: java ServerVCS port");
 			return;
 		}
 		int port = Integer.parseInt(args[0]);
-
 		System.out.println("Server: waiting for clients on port "+port);
 		ServerVCS server = new ServerVCS(port);
-
 		while (true) {
 			server.acceptClient();
 		}
 
-		// ServerSockets are automatically closed for us by OS
-		// when the program exits
+		// ServerSockets zijn automatisch gesloten door de OS
+		//wanneer het programma afsluit
 	}
 
 }

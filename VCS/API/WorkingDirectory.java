@@ -161,5 +161,9 @@ public class WorkingDirectory {
 		
 		return new FileInputStream(name);
 	}
+	
+	public String getcurrentfolder(){
+	return currentDirectory.getName();
+	}
 
 }
