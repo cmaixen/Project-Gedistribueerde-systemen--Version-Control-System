@@ -59,7 +59,7 @@ import VCS.Events.GetEvent;
 import VCS.Events.LocalEvent;
 import VCS.Events.NewRepositoryEvent;
 import VCS.Events.UpdateEvent;
-
+import VCS.Server.MetaFileManager;
 
 /**
  * A simple echo server.
@@ -81,10 +81,9 @@ public class ServerVCS {
 	//  final variable
 	private final ServerSocket serverSocket;
 	private String metafile = "MetaServerCVS";
-	private MetaDataServer MetaFile = null;
-	private WorkingDirectory server_repository = new WorkingDirectory("./");
 	private String servername = "Serverrepos";
 	private String serverhomeDirectory = "./" +servername;
+	private MetaFileManager metafilemanager = new MetaFileManager(servername,metafile);;
 
 
 	/**
@@ -97,10 +96,7 @@ public class ServerVCS {
 		this.serverSocket = new ServerSocket();
 		//Serversocket gets bond to address
 		serverSocket.bind(serverAddress);
-		if (!server_repository.changeWorkingDir(servername)){
-			server_repository.createDir(servername);
-			server_repository.changeWorkingDir(servername);
-		}
+		
 	}
 
 	/**
@@ -136,7 +132,8 @@ public class ServerVCS {
 		private int id;
 		private ObjectOutputStream outputStream = null;
 		private ObjectInputStream inputStream = null;
-
+		private MetaDataServer MetaFile = null;
+		private WorkingDirectory server_repository = new WorkingDirectory("./");
 		public Session(Socket clientSocket, int id) {
 			this.id = id;
 			this.clientSocket = clientSocket;
@@ -183,6 +180,7 @@ public class ServerVCS {
 					
 					System.out.println("write");
 					// send back the string to the client
+					
 					outputStream.writeObject(clientassignment);
 					
 					// make sure the output is sent to the client before closing
@@ -456,15 +454,9 @@ public boolean locateFiles(String name, ArrayList<String> Files_to_locate,String
 	}
 
 	public void loadMetaFile() throws FileNotFoundException, IOException, ClassNotFoundException{
-		try{
-		FileInputStream fis = new FileInputStream(server_repository.getWorkingDir() + "/" + metafile);
-		ObjectInputStream ois = new ObjectInputStream(fis);
-		MetaFile = (MetaDataServer) ois.readObject();
-		ois.close();
-	}catch(IOException e){
-		e.printStackTrace();
+		MetaFile = metafilemanager.GetMetafile(server_repository.getcurrentfolder());
 	}
-	}
+	
 	
 	//wraps loading repo en metafile in one
 	public boolean gotoRepository(String reponame) throws IOException, ClassNotFoundException{
@@ -491,6 +483,7 @@ public boolean locateFiles(String name, ArrayList<String> Files_to_locate,String
 		oos.writeObject(MetaFile);
 		oos.flush();
 		oos.close();
+	//	metafilemanager.UpdateMetafile(reponame, MetaFile);
 		}
         catch (FileNotFoundException ex) {
             System.out.println("Error with specified file") ;
@@ -545,6 +538,7 @@ public ArrayList<String> Hide_MetaFiles(ArrayList<String> list){
 		else{ 
 			//create MetaFile and save      
 			MetaFile = new MetaDataServer();
+			metafilemanager.AddMetafile(name_repo, MetaFile);
 			System.out.println(MetaFile);
 			saveMetaFile(name_repo);
 			System.out.println("Server: New repository '" + name_repo + "' succefully created");
@@ -585,13 +579,13 @@ public ArrayList<String> Hide_MetaFiles(ArrayList<String> list){
 		if (revisionlist == null){
 			return new ErrorEvent("File does not exist");
 		}
-		else {revision.setRevisionlist(revisionlist);
+		else {
 			for(UUID uuid : revisionlist){
 				revisionlist_time.add(MetaFile.GetTimestamp(uuid));
-				
-				revision.setRevisionlist_time(revisionlist_time);
+	
 			}
-
+	
+			revision.setRevisionlists(revisionlist , revisionlist_time);
 			}
 		return revision; }
 	
@@ -602,14 +596,23 @@ public ArrayList<String> Hide_MetaFiles(ArrayList<String> list){
 		//ga naar repo
 		gotoRepository(repo);
 
-		HashMap<UUID,CommitEvent> CommitTable = MetaFile.GetCommitTable();
-		getcommitevent.SetCommitTable(CommitTable);
+		HashMap<UUID,CommitEvent> Commitmap = MetaFile.GetCommitTable();
+		 ArrayList<UUID> CommitTable = new ArrayList<UUID>();
+		ArrayList<CommitEvent> CommitEventTable = new  ArrayList<CommitEvent>();
+		for(UUID uuid : Commitmap.keySet()){
+			CommitTable.add(uuid);
+		}
+		for(CommitEvent commitevent : Commitmap.values()){
+			CommitEventTable.add(commitevent);
+		}
+		getcommitevent.SetCommitTable(CommitTable, CommitEventTable);
 		return getcommitevent;
 	}
 	
 
 	public Command Commit(CommitEvent commitevent) throws IOException, ClassNotFoundException{
 		String destname = commitevent.getDestination();
+		gotoRepository(destname);
 		String comment = commitevent.getComment();
 		boolean force = commitevent.getForce();
 		
@@ -634,7 +637,7 @@ public ArrayList<String> Hide_MetaFiles(ArrayList<String> list){
 			//We vragen de previous uuid op, omdat we met filevent al hebben opgeslagen en in de table hebben geupdate
 			UUID previous_uuid = MetaFile.GetPreviousUUID(filename);
 			System.out.println("Previous UUID :" + previous_uuid);
-			if(!(previous_uuid == null || uuid.equals(previous_uuid))){
+			if(!(previous_uuid == null || (uuid != null && uuid.equals(previous_uuid)))){
 				commit_invalid = true;
 			}
 
@@ -651,7 +654,7 @@ public ArrayList<String> Hide_MetaFiles(ArrayList<String> list){
 		//krijg CommitID
 		UUID commitnr = commitevent.getCommitUUID();
 		//ga naar repo en laad metafile;
-		gotoRepository(destname);
+		//gotoRepository(destname);
 		//toevoegen van commit aan Metafile
 		MetaFile.AddCommit(commitnr,commitevent);
 		//opslagen van Metafile
