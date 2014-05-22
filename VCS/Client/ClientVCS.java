@@ -76,7 +76,7 @@ public class ClientVCS{
 	private boolean force = false;
 
 	//output messages of the server get adjusted by applied methodes that react on original message from server
-	Object serverReply;
+	Command serverReply;
 
 	String serverMessage;
 	private ObjectOutputStream outputStream = null;
@@ -174,8 +174,7 @@ public class ClientVCS{
 				System.out.println("Client: sent '" + message + "'");
 
 				// wait for and read the reply of the server
-				serverReply = inputStream.readObject();
-				
+				serverReply = (Command) inputStream.readObject();
 
 				//process assignment server
 				process(serverReply);
@@ -304,12 +303,12 @@ try {
 	
 	}
 
-	public void process(Object input) throws Exception{
+	public void process(Command input) throws Exception{
 		
 		//reset force
 		force = false;
 
-		String command = ((Command)input).getCommand(); 
+		String command = input.getCommand(); 
 
 		if(command.equals("CHECKOUT")){
 			serverMessage = "Repository check out succefull!";
@@ -317,12 +316,10 @@ try {
 		else if(command.equals("COMMIT")) {
 			//Filetable Updaten
 			ArrayList<String> listwithcommitfiles = ((CommitEvent) input).getCommitFiles();
-			System.out.println(listwithcommitfiles);
 			UUID uuid_commit = ((CommitEvent) input).getCommitUUID();
 			for(String file : listwithcommitfiles){
 				MetaFile.add(file, uuid_commit);
 			}
-
 			
 			//ToCommitlijst leegmaken
 			MetaFile.Committed();
@@ -356,7 +353,7 @@ try {
 	        
 		}
 		else if (command.equals("GETREVISIONS")){
-			GetRevisionsEvent revisionsevent = (GetRevisionsEvent) input;
+			GetRevisionsEvent revisionsevent = ((GetRevisionsEvent) input);
 			ArrayList<UUID> revisions = revisionsevent.getRevisionlist();
 			ArrayList<Timestamp> timestamps = revisionsevent.getRevisionlist_time();
 			
@@ -374,7 +371,7 @@ try {
 			
 		}
 		else if(command.equals("CONFLICT")){
-			ConflictEvent conflictevent = (ConflictEvent) input;
+			ConflictEvent conflictevent = ((ConflictEvent) input);
 			String Message = conflictevent.GetMessage();
 			System.out.println(Message);
 
@@ -405,24 +402,21 @@ try {
 		}
 		
 		else if(command.equals("LOGS")){
-			GetCommitsEvent commitevent = (GetCommitsEvent) input;
-			int counter = 0;
-			ArrayList<UUID> uuids = commitevent.GetCommitTable();
-			ArrayList<CommitEvent> events = commitevent.GetCommitEventTable();
-		
-			for(CommitEvent entry : events){
+			
+			Set<Entry<UUID, CommitEvent>> commitset = (((GetCommitsEvent) input).GetCommitTable()).entrySet();
+			
+			for(Map.Entry<UUID, CommitEvent> entry : commitset){
 				
-				UUID uuid = uuids.get(counter);
-				
-				Timestamp timestamp = entry.getTimestamp();
-				ArrayList<String> commited_files = entry.getCommitFiles();
-				String comment = entry.getComment();
+				UUID uuid = entry.getKey();
+				CommitEvent commitevent =  entry.getValue();
+				Timestamp timestamp = commitevent.getTimestamp();
+				ArrayList<String> commited_files = commitevent.getCommitFiles();
+				String comment = commitevent.getComment();
 				System.out.println("#	Commit: " + uuid);
 				System.out.println("#	Date: " + timestamp);
 				System.out.println("#	Commited Files: " + commited_files);
 				System.out.println("#");
 				System.out.println("#	" + comment);
-				counter++;
 			}
 			
 		}
